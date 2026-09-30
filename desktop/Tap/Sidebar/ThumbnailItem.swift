@@ -69,8 +69,8 @@ final class ThumbnailItem: NSCollectionViewItem {
 
     /// Shows the slide. Without a picture the item shows `card` on `paper`;
     /// when the picture arrives for the slide it already shows, it fades in
-    /// over the card, unless Reduce Motion is on.
-    func configure(slide: Slide, image: NSImage?, isUpdating: Bool, card: SlideCard = SlideCard(heading: ""), paper: PaperColour = .neutral) {
+    /// over the card, unless Reduce Motion is on. A dimmed panel's cards do not sheen.
+    func configure(slide: Slide, image: NSImage?, isUpdating: Bool, card: SlideCard = SlideCard(heading: ""), paper: PaperColour = .neutral, isDimmed: Bool = false) {
         let sameSlide = self.slide?.number == slide.number
         let wasShowingCard = showsCard
         self.slide = slide
@@ -81,7 +81,8 @@ final class ThumbnailItem: NSCollectionViewItem {
             cardView.alphaValue = 1
             cardView.configure(card: card, paper: paper)
             cardView.isHidden = false
-            cardView.startSheen()
+            // A panel that cannot render waits for nothing, so the card holds still.
+            if isDimmed { cardView.stopSheen() } else { cardView.startSheen() }
         } else if wasShowingCard, sameSlide, !WelcomeMotion.reduceMotion() {
             fadeCardOut()
         } else {

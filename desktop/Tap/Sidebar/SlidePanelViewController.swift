@@ -149,6 +149,7 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
         guard dimmed != isDimmed else { return }
         isDimmed = dimmed
         scrollView.alphaValue = dimmed ? 0.45 : 1
+        for slide in displayedSlides { refreshItem(forSlide: slide.number) }
     }
 
     func setPinned(_ pinned: Bool) {
@@ -188,7 +189,7 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     private func configure(_ item: ThumbnailItem, slide: Slide) {
         let index = slide.number - 1
         item.configure(slide: slide, image: images[slide.number], isUpdating: updating.contains(slide.number),
-                       card: cards.indices.contains(index) ? cards[index] : SlideCard(heading: slide.title), paper: paper)
+                       card: cards.indices.contains(index) ? cards[index] : SlideCard(heading: slide.title), paper: paper, isDimmed: isDimmed)
     }
 
     /// Sets the text cards and the paper colour they are drawn on. A panel

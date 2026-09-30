@@ -67,6 +67,11 @@ final class PlaySplitControl: NSSegmentedControl {
         glyphView.frame = NSRect(x: bounds.minX + (segmentBoundary - size.width) / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height).integral
     }
 
+    /// A disabled control dims its glyph too: the glyph is a view of its own, above the segment.
+    override var isEnabled: Bool {
+        didSet { glyphView.contentTintColor = isEnabled ? .labelColor : .disabledControlTextColor }
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if isGettingReady { applyReadiness() }

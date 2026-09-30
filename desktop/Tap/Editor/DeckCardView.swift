@@ -24,11 +24,16 @@ final class DeckChipView: NSView {
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
             heightAnchor.constraint(equalToConstant: 20),
         ])
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setCompressionPriority(.defaultLow)
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
         setAccessibilityLabel(chip.text)
+    }
+
+    /// How firmly the chip and its text keep their width against a short row.
+    func setCompressionPriority(_ priority: NSLayoutConstraint.Priority) {
+        label.setContentCompressionResistancePriority(priority, for: .horizontal)
+        setContentCompressionResistancePriority(priority, for: .horizontal)
     }
 
     @available(*, unavailable)
@@ -184,6 +189,8 @@ final class DeckCardView: NSView {
         chipViews = chips.enumerated().map { index, chip in
             let view = DeckChipView(chip)
             view.setAccessibilityIdentifier("deck-chip-\(index)")
+            // When the row is short the last chip gives way first, so the first one reads whole.
+            view.setCompressionPriority(.init(Float(max(251, 700 - index))))
             return view
         }
         for view in chipViews { chipStack.addArrangedSubview(view) }

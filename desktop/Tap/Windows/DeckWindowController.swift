@@ -822,9 +822,13 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     private weak var playToolbarItem: NSToolbarItem?
 
-    /// The Play glyph dims and breathes while tap is not ready, and its tooltip says why.
+    /// The Play glyph dims and breathes while tap is on its way up, and its tooltip says why.
+    /// A tap that failed, stopped or refused the deck's settings is not on its way, so the glyph stays solid.
     func refreshPlayReadiness() {
-        playButton.isGettingReady = !sessionController.isTapReady
+        switch sessionController.session.state {
+        case .starting, .restarting: playButton.isGettingReady = true
+        case .running, .stopped, .failed, .invalidDeck: playButton.isGettingReady = false
+        }
         playToolbarItem?.toolTip = playButton.currentToolTip
     }
 
