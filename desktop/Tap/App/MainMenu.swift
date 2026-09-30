@@ -50,12 +50,7 @@ enum MainMenu {
         let menu = NSMenu(title: "File")
         menu.addItem(item("New Deck…", action: #selector(AppDelegate.newDeck(_:)), key: "n"))
         menu.addItem(item("Open…", action: #selector(NSDocumentController.openDocument(_:)), key: "o"))
-        let recent = item("Open Recent", action: nil)
-        let recentMenu = NSMenu(title: "Open Recent")
-        // AppKit fills a menu that holds a Clear Menu item with recent documents.
-        recentMenu.addItem(item("Clear Menu", action: #selector(NSDocumentController.clearRecentDocuments(_:))))
-        recent.submenu = recentMenu
-        menu.addItem(recent)
+        // AppKit inserts Open Recent, with its Clear Menu item, after Open… by itself.
         menu.addItem(.separator())
         menu.addItem(item("Close", action: #selector(NSWindow.performClose(_:)), key: "w"))
         menu.addItem(item("Save", action: #selector(NSDocument.save(_:)), key: "s"))

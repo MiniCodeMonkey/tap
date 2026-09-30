@@ -19,4 +19,13 @@ final class MenuTests: HostedTestCase {
         XCTAssertFalse(revertTo.isHidden)
         XCTAssertNotNil(revertTo.submenu)
     }
+
+    /// AppKit adds its own Open Recent to a File menu that has Open…, so the
+    /// menu bar builds none of its own.
+    func testFileMenuHasOneOpenRecent() throws {
+        let file = try XCTUnwrap(NSApp.mainMenu?.items.first { $0.title == "File" }?.submenu)
+        let openRecent = file.items.filter { $0.title == "Open Recent" }
+        XCTAssertEqual(openRecent.count, 1, "File menu: \(file.items.map(\.title))")
+        XCTAssertNotNil(openRecent.first?.submenu?.items.first { $0.action == #selector(NSDocumentController.clearRecentDocuments(_:)) })
+    }
 }
