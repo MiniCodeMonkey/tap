@@ -95,6 +95,18 @@ func TestProblems_TransitionAndLayoutSuggestTheNearestValue(t *testing.T) {
 	}
 }
 
+func TestProblems_AnUnknownThemeColorsKeyOffersNoValue(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ThemeColors = map[string]string{"bg": "#fff"}
+	problems := cfg.Problems()
+	if len(problems) != 1 || problems[0].Key != "themeColors.bg" || problems[0].Severity != SeverityError {
+		t.Fatalf("problems = %+v", problems)
+	}
+	if len(problems[0].Suggestions) != 0 || len(problems[0].Allowed) != 0 {
+		t.Errorf("a key name is not a value the setting can take: %+v", problems[0])
+	}
+}
+
 func TestProblems_ErrorsMatchValidate(t *testing.T) {
 	cases := map[string]func(*Config){
 		"themeColors key":   func(c *Config) { c.ThemeColors = map[string]string{"bg": "#fff"} },

@@ -128,7 +128,7 @@ Feature: Live code approval
     Given the drivers map has "password: ${DB_PASSWORD}"
     Then tap expands ${...} from the environment when it runs the driver    # NEW env expansion in driver settings
     And the app passes its login shell environment to tap, so a variable set in ~/.zshrc works
-    And the Deck tab shows a hint to use ${NAME} instead of a literal password
+    And the Deck card's form shows a hint to use ${NAME} instead of a literal password
 
   Scenario: The safe button is the default
     Then "Don't Allow" is the default button in the approval sheet, so Return never grants execution

@@ -110,3 +110,32 @@ Feature: Preview
     When I press T with the preview focused
     Then the preview cycles themes and the file does not change
 
+  Scenario: A bad setting stops the preview with one fix
+    Given the deck sets an aspect ratio "16/9" that tap does not support
+    Then tap tells the app which setting is wrong, with the values it accepts, and the app does not start tap again for it
+    And the preview shows "This deck's settings need one fix", says in plain words what is wrong, and offers "Use 16:9"
+    And "Show in Editor" opens the Deck card on the field
+    And "Details" holds the raw line
+    When I press "Use 16:9"
+    Then the line is rewritten as one undo step, tap starts, and the preview comes back by itself
+    And in the Deck card the card is tinted, the field carries the problem with the same fix, and the closed card shows a red "1 problem" chip
+    And a new problem opens a closed card once, and not again while the same problem stands
+    When there are two problems
+    Then the heading says "need 2 fixes" and each problem has its own fix
+
+  Scenario: An unknown theme still renders
+    Given the deck names a theme "apple-basic" that tap does not have
+    Then the preview still renders, in Base
+    And a quiet amber band above the preview says the theme is not a tap theme, with "Use <the nearest theme>" and "Choose Theme…"
+    And the toolbar's Theme button reads "Base" with an amber dot and a tooltip that says why
+    And the closed Deck card shows the name as an amber chip
+
+  Scenario: An unexpected stop is calm
+    When tap quits while showing the deck, for a reason that is not the deck's settings
+    Then the preview says "The preview stopped" and "tap quit while showing this deck. Your text is safe."
+    And it offers "Restart Preview" and "Show Tap Log", and tap's raw output is only behind "Details"
+
+  Scenario: Thumbnails dim while the preview cannot render
+    When the preview shows a problem card or the stopped notice
+    Then the slide thumbnails stay, dimmed, and come back to full strength with the preview
+

@@ -29,7 +29,8 @@ type Problem struct {
 	// Severity is SeverityError or SeverityWarning.
 	Severity string `json:"severity"`
 	// Suggestions are values that would fix the problem, best first. They
-	// come from the key's allowed values, never from a list of guesses.
+	// come from the key's allowed values, never from a list of guesses. A
+	// problem with the name of a key, not its value, has none.
 	Suggestions []string `json:"suggestions"`
 	// Allowed lists every value the key accepts, in schema order. It is
 	// empty for a key that takes free text.
@@ -87,12 +88,10 @@ func (c *Config) Problems() []Problem {
 			continue
 		}
 		problems = append(problems, Problem{
-			Key:         "themeColors." + name,
-			Value:       c.ThemeColors[name],
-			Message:     fmt.Sprintf("%q is not a themeColors key. Use %s.", name, joinAlternatives(colorKeys)),
-			Severity:    SeverityError,
-			Suggestions: NearestValues(name, colorKeys),
-			Allowed:     colorKeys,
+			Key:      "themeColors." + name,
+			Value:    c.ThemeColors[name],
+			Message:  fmt.Sprintf("%q is not a themeColors key. Use %s.", name, joinAlternatives(colorKeys)),
+			Severity: SeverityError,
 		})
 	}
 	for _, field := range []struct {

@@ -7,7 +7,11 @@ final class PreviewOverlayView: NSView {
     let titleLabel = NSTextField(labelWithString: "")
     let detailLabel = NSTextField(labelWithString: "")
     let outputLabel = NSTextField(wrappingLabelWithString: "")
-    let tryAgainButton = NSButton(title: "Try Again", target: nil, action: nil)
+    /// Restart Preview: tap starts again, with a fresh count.
+    let tryAgainButton = NSButton(title: "Restart Preview", target: nil, action: nil)
+    /// Opens the raw output under the notice.
+    let detailsButton = NSButton(title: "", target: nil, action: nil)
+    private let detailsRow = NSStackView()
     let showLogButton = NSButton(title: "Show Tap Log", target: nil, action: nil)
 
     override init(frame: NSRect) {
@@ -25,7 +29,18 @@ final class PreviewOverlayView: NSView {
         showLogButton.bezelStyle = .rounded
         let buttons = NSStackView(views: [tryAgainButton, showLogButton])
         buttons.spacing = 8
-        let stack = NSStackView(views: [titleLabel, detailLabel, outputLabel, buttons])
+        detailsButton.setButtonType(.pushOnPushOff)
+        detailsButton.bezelStyle = .disclosure
+        detailsButton.target = self
+        detailsButton.action = #selector(detailsPressed(_:))
+        detailsButton.setAccessibilityIdentifier("preview-overlay-details")
+        detailsButton.setAccessibilityLabel("Details")
+        let detailsTitle = NSTextField(labelWithString: "Details")
+        detailsTitle.font = .systemFont(ofSize: 11)
+        detailsTitle.textColor = .secondaryLabelColor
+        detailsRow.setViews([detailsButton, detailsTitle], in: .leading)
+        detailsRow.spacing = 2
+        let stack = NSStackView(views: [titleLabel, detailLabel, buttons, detailsRow, outputLabel])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 8
@@ -49,7 +64,10 @@ final class PreviewOverlayView: NSView {
         titleLabel.stringValue = title
         detailLabel.stringValue = detail
         outputLabel.stringValue = output.joined(separator: "\n")
-        outputLabel.isHidden = output.isEmpty
+        // The raw output is never on the notice itself: it is behind Details.
+        outputLabel.isHidden = true
+        detailsButton.state = .off
+        detailsRow.isHidden = output.isEmpty
         tryAgainButton.isHidden = !buttons
         showLogButton.isHidden = !buttons
         layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(opaque ? 0.97 : 0.55).cgColor
@@ -60,5 +78,9 @@ final class PreviewOverlayView: NSView {
     func hide() {
         isHidden = true
         titleLabel.stringValue = ""
+    }
+
+    @objc private func detailsPressed(_ sender: NSButton) {
+        outputLabel.isHidden = sender.state != .on
     }
 }

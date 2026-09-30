@@ -34,21 +34,21 @@ final class PreviewWindowTests: HostedTestCase {
         XCTAssertNil(windowController.previewWindowController)
     }
 
-    func testTheDeckTabLeavesADetachedPreviewAlone() async throws {
+    func testTheDeckCardLeavesADetachedPreviewAlone() async throws {
         Task { await AppEnvironment.shared.deckSchema.load() }
         try await waitUntil(timeout: 30, "the schema") { AppEnvironment.shared.deckSchema.isLoaded }
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
         let controller = try XCTUnwrap(document.sessionController)
         let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
-        deckWindow.showDeckTab(nil)
+        deckWindow.showDeckSettings(nil)
         deckWindow.showPreviewInWindow(nil)
-        XCTAssertFalse(controller.previewViewController.view.isHidden, "detached while Deck was selected: shown in its window")
-        deckWindow.showPreviewTab(nil)
-        deckWindow.showDeckTab(nil)
-        XCTAssertFalse(controller.previewViewController.view.isHidden, "the Deck tab does not reach a preview in its own window")
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "detached while the card was open: shown in its window")
+        deckWindow.showPreview(nil)
+        deckWindow.showDeckSettings(nil)
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "the Deck card does not reach a preview in its own window")
+        XCTAssertEqual(controller.deckCard.display, .form)
         deckWindow.dockPreview()
-        XCTAssertTrue(controller.previewViewController.view.isHidden, "docked back under the Deck tab")
-        deckWindow.showPreviewTab(nil)
-        XCTAssertFalse(controller.previewViewController.view.isHidden)
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "docked back beside the open card")
+        XCTAssertEqual(controller.deckCard.display, .form, "and the card stays as it was")
     }
 }

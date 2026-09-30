@@ -1,9 +1,10 @@
 import XCTest
 @testable import Tap
 
-/// The Deck tab: a form from tap's schema over the frontmatter, each
-/// change one undo step through the editor.
-final class DeckTabTests: HostedTestCase {
+/// The Deck card at the top of the editor: closed it sums the deck up,
+/// open it is a form from tap's schema, or the frontmatter's own lines as
+/// text. Each change is one undo step through the editor.
+final class DeckCardTests: HostedTestCase {
     /// The schema, loaded once per process; the load is a tap run with its own timeout.
     func loadedSchema() async throws -> [SchemaKey] {
         Task { await AppEnvironment.shared.deckSchema.load() }
@@ -11,46 +12,73 @@ final class DeckTabTests: HostedTestCase {
         return AppEnvironment.shared.deckSchema.keys
     }
 
-    func openOnTheDeckTab(_ name: String = "seven-slides.md", slides: Int = 7) async throws -> (DeckDocument, DeckSessionController, DeckWindowController) {
+    func openOnTheDeckCard(_ name: String = "seven-slides.md", slides: Int = 7) async throws -> (DeckDocument, DeckSessionController, DeckWindowController) {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck(name))
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: slides)
         let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
-        deckWindow.showDeckTab(nil)
+        deckWindow.showDeckSettings(nil)
         return (document, controller, deckWindow)
     }
 
-    func testTheDeckTabEnablesOnceTheSchemaHasLoaded() async throws {
-        _ = try await loadedSchema()
-        // The schema loaded before this deck opened: the tab is on from the start.
-        let (_, controller, deckWindow) = try await openOnTheDeckTab()
-        let inspector = controller.inspectorViewController
-        XCTAssertTrue(inspector.isDeckTabAvailable)
-        XCTAssertTrue(inspector.tabs.isEnabled(forSegment: 1), "the segment shows what the pane knew before its view loaded")
-        XCTAssertEqual(inspector.selectedTab, .deck)
-        XCTAssertEqual(inspector.tabs.selectedSegment, 1)
-        let item = NSMenuItem(title: "Deck", action: #selector(DeckWindowController.showDeckTab(_:)), keyEquivalent: "")
-        XCTAssertTrue(deckWindow.validateMenuItem(item))
-        deckWindow.showPreviewTab(nil)
-        XCTAssertEqual(inspector.selectedTab, .preview)
-        XCTAssertFalse(controller.previewViewController.view.isHidden)
-        // Cmd+Option+0 hides the pane; View > Deck brings it back with the tab.
-        deckWindow.togglePreview(nil)
-        XCTAssertTrue(deckWindow.splitViewController.isPreviewHidden)
-        deckWindow.showDeckTab(nil)
-        XCTAssertFalse(deckWindow.splitViewController.isPreviewHidden, "a tab nobody can see is no tab")
-        XCTAssertEqual(inspector.selectedTab, .deck)
+    func chipTexts(_ controller: DeckSessionController) -> [String] {
+        controller.deckCard.cardView.chipViews.map(\.label.stringValue)
     }
 
-    func testDeckSettingsLiveInTheInspector() async throws {
+    func testTheDeckCardIsTheOneThingThatFolds() async throws {
+        _ = try await loadedSchema()
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        try await waitForBoxes(document, count: 7)
+        let editor = controller.editor
+        let card = controller.deckCard
+        let deck = try XCTUnwrap(document.fileURL)
+
+        // Closed: one line above slide 1, with the summary.
+        XCTAssertEqual(card.display, .collapsed)
+        XCTAssertTrue(card.cardView.superview === editor, "the card is part of the editor, above slide 1")
+        XCTAssertEqual(card.cardView.frame.minY, EditorTextView.deckCardTop, accuracy: 0.5)
+        XCTAssertEqual(card.cardView.frame.height, EditorTextView.deckCardHeaderHeight, accuracy: 0.5, "one line")
+        XCTAssertEqual(chipTexts(controller), ["Default", "16:9"], "the theme's name and the aspect ratio, from tap's schema")
+        XCTAssertTrue(card.cardView.modeControl.isHidden, "the Form | Text switch shows only when open")
+        XCTAssertTrue(card.form.view.isHiddenOrHasHiddenAncestor)
+        XCTAssertGreaterThan(editor.hiddenLength, 0, "the frontmatter's lines are not in the flow of the editor")
+        XCTAssertEqual(editor.boxes[0].range.location, editor.hiddenLength)
+        try await waitUntil(timeout: 10, "slide 1 laid out") { editor.boxRect(forBoxAt: 0) != nil }
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(editor.boxRect(forBoxAt: 0)).minY, card.cardView.frame.maxY,
+                                    "slide 1 starts below the card")
+
+        // A click opens it, and it is remembered for the deck.
+        card.cardView.disclosureButton.performClick(nil)
+        XCTAssertEqual(card.display, .form)
+        XCTAssertFalse(card.form.view.isHiddenOrHasHiddenAncestor)
+        XCTAssertFalse(card.cardView.modeControl.isHidden)
+        XCTAssertGreaterThan(card.cardView.frame.height, EditorTextView.deckCardHeaderHeight, "the body is under the header")
+        XCTAssertTrue(AppEnvironment.shared.panelState.isDeckCardOpen(deck: deck))
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(editor.boxRect(forBoxAt: 0)).minY, card.cardView.frame.maxY, "slide 1 moves down with the open card")
+
+        // Space, with the disclosure focused, closes it.
+        let window = try XCTUnwrap(editor.window)
+        XCTAssertTrue(window.makeFirstResponder(card.cardView.disclosureButton))
+        let space = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                   context: nil, characters: " ", charactersIgnoringModifiers: " ", isARepeat: false, keyCode: 49))
+        card.cardView.disclosureButton.keyDown(with: space)
+        XCTAssertEqual(card.display, .collapsed)
+        XCTAssertFalse(AppEnvironment.shared.panelState.isDeckCardOpen(deck: deck))
+        XCTAssertNil(editor.frontmatterTextRegion, "closed, the frontmatter's lines stay out of the editor")
+    }
+
+    func testDeckSettingsLiveInTheDeckCard() async throws {
         let keys = try await loadedSchema()
-        let (_, controller, deckWindow) = try await openOnTheDeckTab()
+        let (_, controller, deckWindow) = try await openOnTheDeckCard()
         let editor = controller.editor
         XCTAssertGreaterThan(editor.hiddenLength, 0, "the frontmatter text is hidden from the editor")
         XCTAssertEqual(editor.boxes[0].range.location, editor.hiddenLength, "slide 1 is the first box")
         let form = controller.deckForm
+        XCTAssertEqual(controller.deckCard.display, .form)
         XCTAssertFalse(form.view.isHiddenOrHasHiddenAncestor)
-        XCTAssertTrue(controller.previewViewController.view.isHidden)
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "the inspector shows the preview only")
+        XCTAssertNil(controller.inspectorViewController.view.descendant(identifiedBy: "inspector-tabs"), "no Preview | Deck switch")
 
         // One field per frontmatter key tap knows; the fields, types and allowed values come from tap deck schema --json.
         for key in keys where key.isScalar { XCTAssertNotNil(form.field(key.name), "a field for \(key.name)") }
@@ -133,13 +161,11 @@ final class DeckTabTests: HostedTestCase {
         editor.undoManager?.undo()
         try await waitUntil(timeout: 5, "the row follows an undo") { themeRow.nameLabel.stringValue == "Default" }
 
-        deckWindow.showPreviewTab(nil)
-        XCTAssertEqual(controller.inspectorViewController.selectedTab, .preview)
     }
 
     func testTheObjectGroupsHaveTheirFields() async throws {
         let keys = try await loadedSchema()
-        let (_, controller, _) = try await openOnTheDeckTab()
+        let (_, controller, _) = try await openOnTheDeckCard()
         let form = controller.deckForm
         let recording = try XCTUnwrap(keys.first { $0.name == "recording" })
         let output = try XCTUnwrap(form.field("recording.output") as? NSTextField)
@@ -153,25 +179,106 @@ final class DeckTabTests: HostedTestCase {
         XCTAssertNotNil(form.field("themeColors.background"))
     }
 
-    func testTheDeckTabRefusesWhileTheFrontmatterIsBroken() async throws {
+    func testTheDeckCardShowsTheFrontmatterAsText() async throws {
+        _ = try await loadedSchema()
+        let (_, controller, _) = try await openOnTheDeckCard()
+        let editor = controller.editor
+        let card = controller.deckCard
+        let original = editor.string
+        let frontmatterLength = editor.hiddenLength
+
+        card.cardView.modeControl.selectedSegment = 1
+        card.cardView.modeControl.sendAction(card.cardView.modeControl.action, to: card.cardView.modeControl.target)
+        XCTAssertEqual(card.display, .text)
+        XCTAssertEqual(editor.deckCardDisplay, .text)
+        XCTAssertEqual(editor.frontmatterTextRegion, NSRange(location: 0, length: frontmatterLength), "the frontmatter's own lines are in the editor now")
+        XCTAssertTrue(card.form.view.isHiddenOrHasHiddenAncestor, "the form gives way to the text")
+        XCTAssertEqual(card.cardView.frame.height, EditorTextView.deckCardHeaderHeight, accuracy: 0.5, "the card's view covers only its header, so the lines can be clicked")
+        XCTAssertGreaterThan(editor.deckCardRect().height, EditorTextView.deckCardHeaderHeight + 40, "the card's surface reaches down to the closing line")
+
+        // The caret can be in the frontmatter, and typing there is the editor's own typing.
+        let titleEnd = (editor.string as NSString).range(of: "Seven Slides").upperBound
+        editor.setSelectedRange(NSRange(location: titleEnd, length: 0))
+        XCTAssertEqual(editor.selectedRange().location, titleEnd, "no longer clamped out of the frontmatter")
+        editor.insertText("!", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Seven Slides!\n"))
+        editor.undoManager?.undo()
+        XCTAssertEqual(editor.string, original, "the same undo stack as any edit in the editor")
+
+        // Back to Form: the frontmatter goes out of the editor's flow again.
+        card.cardView.modeControl.selectedSegment = 0
+        card.cardView.modeControl.sendAction(card.cardView.modeControl.action, to: card.cardView.modeControl.target)
+        XCTAssertEqual(card.display, .form)
+        XCTAssertNil(editor.frontmatterTextRegion)
+        XCTAssertEqual(editor.hiddenLength, frontmatterLength, "the frontmatter is hidden again")
+    }
+
+    func testADeckWithNoFrontmatterHasADeckCard() async throws {
+        _ = try await loadedSchema()
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("plain.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        let card = controller.deckCard
+        XCTAssertTrue(card.cardView.superview === editor, "the card is there without frontmatter")
+        XCTAssertEqual(card.display, .collapsed)
+        XCTAssertEqual(chipTexts(controller), ["Default", "16:9"])
+        XCTAssertFalse(card.textIsAvailable, "there is no frontmatter to show as text yet")
+        let original = editor.string
+
+        card.setOpen(true)
+        XCTAssertEqual(card.display, .form, "it offers the fields")
+        let title = try XCTUnwrap(card.form.field("title") as? NSTextField)
+        title.stringValue = "Fresh"
+        title.sendAction(title.action, to: title.target)
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Fresh\n---\n"), "the first change writes a frontmatter block: \(editor.string.prefix(40))")
+        XCTAssertTrue(editor.string.hasSuffix(original), "the deck's own text is untouched below it")
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Title")
+        editor.undoManager?.undo()
+        XCTAssertEqual(editor.string, original, "one undo step takes the whole block back")
+    }
+
+    func testFrontmatterThatDoesNotParseOpensTheDeckCardAsText() async throws {
         _ = try await loadedSchema()
         let document = try await openDeck(try Fixtures.copyDeck("broken-frontmatter.md"))
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 2)
         try await waitUntil(timeout: 10, "tap's deck error") { !controller.editor.deckErrors.isEmpty }
+        let card = controller.deckCard
+        XCTAssertTrue(card.isOpen, "the card opens by itself")
+        XCTAssertEqual(card.display, .text, "as text, since a form cannot be built from what does not parse")
+        XCTAssertEqual(controller.editor.deckCardTint, .error)
+        XCTAssertFalse(controller.editor.deckCardMarkedLines.isEmpty, "the failing line is marked")
+        XCTAssertTrue(controller.editor.deckCardMarkedLines.allSatisfy { $0.isError })
+        XCTAssertNotNil(controller.editor.frontmatterTextRegion, "the frontmatter's lines are in the editor to fix")
+        XCTAssertTrue(card.cardView.modeControl.isHidden == false)
+        XCTAssertTrue(card.deckErrors.first?.hasPrefix("frontmatter:") == true, "tap's own message")
+    }
+
+    func testDeckSettingsFromTheViewMenu() async throws {
+        _ = try await loadedSchema()
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
         let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
-        deckWindow.showDeckTab(nil)
-        let form = controller.deckForm
-        XCTAssertNil(form.field("title"), "no field to edit a frontmatter tap cannot read")
-        XCTAssertTrue(form.stack.arrangedSubviews.contains(form.errorTitleLabel))
-        XCTAssertEqual(form.errorTitleLabel.stringValue, "The deck settings have a problem")
-        XCTAssertTrue(form.errorLabel.stringValue.hasPrefix("frontmatter:"), "tap's own message")
-        XCTAssertEqual(form.errorHintLabel.stringValue, "The frontmatter is shown in the editor until it parses.")
+        let view = MainMenu.viewMenu()
+        let item = try XCTUnwrap(view.items.first { $0.title == "Show Deck Settings" })
+        XCTAssertEqual(item.keyEquivalent, "2")
+        XCTAssertEqual(item.keyEquivalentModifierMask, [.command, .option])
+        XCTAssertEqual(item.action, #selector(DeckWindowController.showDeckSettings(_:)))
+        let preview = try XCTUnwrap(view.items.first { $0.title == "Show Preview" })
+        XCTAssertEqual(preview.keyEquivalent, "1")
+        XCTAssertNil(view.items.first { $0.title == "Deck" }, "no Deck tab any more")
+        XCTAssertTrue(deckWindow.validateMenuItem(item))
+
+        XCTAssertEqual(controller.deckCard.display, .collapsed)
+        deckWindow.showDeckSettings(nil)
+        XCTAssertEqual(controller.deckCard.display, .form, "the card opens")
+        let responder = try XCTUnwrap(deckWindow.window?.firstResponder as? NSView)
+        XCTAssertTrue(responder.isDescendant(of: controller.deckCard.cardView), "and takes the focus")
     }
 
     func testARefreshNeverClobbersTheFieldBeingEdited() async throws {
         _ = try await loadedSchema()
-        let (_, controller, _) = try await openOnTheDeckTab()
+        let (_, controller, _) = try await openOnTheDeckCard()
         let editor = controller.editor
         let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
         let window = try XCTUnwrap(title.window)
@@ -191,7 +298,7 @@ final class DeckTabTests: HostedTestCase {
     /// lands in the frontmatter first, never in the bin.
     func testARebuildCommitsTheFieldBeingEdited() async throws {
         _ = try await loadedSchema()
-        let (document, controller, _) = try await openOnTheDeckTab()
+        let (document, controller, _) = try await openOnTheDeckCard()
         let editor = controller.editor
         let deck = try XCTUnwrap(document.fileURL)
         let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
@@ -212,7 +319,7 @@ final class DeckTabTests: HostedTestCase {
     /// Play saves the file; a Deck tab field still being typed in goes into that save.
     func testPlayCommitsTheDeckTabsEdit() async throws {
         _ = try await loadedSchema()
-        let (document, controller, _) = try await openOnTheDeckTab()
+        let (document, controller, _) = try await openOnTheDeckCard()
         let deck = try XCTUnwrap(document.fileURL)
         let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
         XCTAssertTrue(try XCTUnwrap(title.window).makeFirstResponder(title))
@@ -229,7 +336,7 @@ final class DeckTabTests: HostedTestCase {
     /// An autosave writes what is typed so far and leaves the person typing.
     func testAnAutosaveWritesTheFieldWithoutTakingItsFocus() async throws {
         _ = try await loadedSchema()
-        let (document, controller, _) = try await openOnTheDeckTab()
+        let (document, controller, _) = try await openOnTheDeckCard()
         let deck = try XCTUnwrap(document.fileURL)
         let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
         let window = try XCTUnwrap(title.window)
@@ -249,7 +356,7 @@ final class DeckTabTests: HostedTestCase {
     /// Cmd-S, a save the person asks for, ends a Deck tab edit and writes it.
     func testASaveThePersonAsksForCommitsTheDeckField() async throws {
         _ = try await loadedSchema()
-        let (document, controller, _) = try await openOnTheDeckTab()
+        let (document, controller, _) = try await openOnTheDeckCard()
         let deck = try XCTUnwrap(document.fileURL)
         let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
         let window = try XCTUnwrap(title.window)
@@ -267,7 +374,7 @@ final class DeckTabTests: HostedTestCase {
     /// An autosave elsewhere (an untitled deck's) writes what is typed so far and leaves the person typing, as one in place does.
     func testAnAutosaveElsewhereKeepsTheFieldsFocus() async throws {
         _ = try await loadedSchema()
-        let (document, controller, _) = try await openOnTheDeckTab()
+        let (document, controller, _) = try await openOnTheDeckCard()
         let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
         let window = try XCTUnwrap(title.window)
         XCTAssertTrue(window.makeFirstResponder(title))
@@ -288,7 +395,7 @@ final class DeckTabTests: HostedTestCase {
     /// edit in progress without writing it into a frontmatter nobody can read.
     func testARebuildNeverWritesIntoABrokenFrontmatter() async throws {
         _ = try await loadedSchema()
-        let (_, controller, _) = try await openOnTheDeckTab()
+        let (_, controller, _) = try await openOnTheDeckCard()
         let editor = controller.editor
         let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
         let window = try XCTUnwrap(title.window)
@@ -297,9 +404,20 @@ final class DeckTabTests: HostedTestCase {
         let range = (editor.string as NSString).range(of: "  sqlite: {}")
         editor.replaceText(in: range, with: "  sqlite: [unclosed", actionName: "Edit")
         try await waitUntil(timeout: 15, "tap's deck error") { !editor.deckErrors.isEmpty }
-        try await waitUntil(timeout: 5, "the form's error state") { controller.deckForm.stack.arrangedSubviews.contains(controller.deckForm.errorTitleLabel) }
+        try await waitUntil(timeout: 5, "the card's text mode") { controller.deckCard.display == .text }
         XCTAssertFalse(editor.string.contains("Draft"), "nothing typed went into the broken frontmatter: \(editor.string.prefix(80))")
         XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Seven Slides\n"))
         XCTAssertNil(window.firstResponder as? NSText, "the edit ended")
+    }
+}
+
+private extension NSView {
+    /// The first view under this one with the accessibility identifier, or nil.
+    func descendant(identifiedBy identifier: String) -> NSView? {
+        if accessibilityIdentifier() == identifier { return self }
+        for subview in subviews {
+            if let found = subview.descendant(identifiedBy: identifier) { return found }
+        }
+        return nil
     }
 }

@@ -142,6 +142,15 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     }
 
     /// Shows the pin filled while the panel is docked and outlined while it peeks.
+    /// True while the preview cannot render: the thumbnails stay, dimmed.
+    private(set) var isDimmed = false
+
+    func setDimmed(_ dimmed: Bool) {
+        guard dimmed != isDimmed else { return }
+        isDimmed = dimmed
+        scrollView.alphaValue = dimmed ? 0.45 : 1
+    }
+
     func setPinned(_ pinned: Bool) {
         isPinned = pinned
         applyPinState()

@@ -140,8 +140,8 @@ enum MainMenu {
         menu.addItem(item("Unpin Slide Panel", action: #selector(DeckWindowController.toggleSlidePanel(_:)), key: "s", modifiers: [.command, .control]))
         menu.addItem(item("Hide Preview", action: #selector(DeckWindowController.togglePreview(_:)), key: "0", modifiers: [.command, .option]))
         menu.addItem(item("Preview in Window", action: #selector(DeckWindowController.showPreviewInWindow(_:))))
-        menu.addItem(item("Preview", action: #selector(DeckWindowController.showPreviewTab(_:)), key: "1", modifiers: [.command, .option]))
-        menu.addItem(item("Deck", action: #selector(DeckWindowController.showDeckTab(_:)), key: "2", modifiers: [.command, .option]))
+        menu.addItem(item("Show Preview", action: #selector(DeckWindowController.showPreview(_:)), key: "1", modifiers: [.command, .option]))
+        menu.addItem(item("Show Deck Settings", action: #selector(DeckWindowController.showDeckSettings(_:)), key: "2", modifiers: [.command, .option]))
         menu.addItem(.separator())
         menu.addItem(item("Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), key: "f", modifiers: [.command, .control]))
         return menu

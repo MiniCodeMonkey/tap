@@ -1,6 +1,6 @@
 import AppKit
 
-/// The Deck tab: a form over the frontmatter, one field per key that
+/// The form in the Deck card: a form over the frontmatter, one field per key that
 /// tap's schema lists (`tap deck schema --json`), so Swift hard-codes no
 /// key. Every change is one edit of the frontmatter through the editor,
 /// one undo step named after the field; the form re-reads the text after
@@ -28,6 +28,26 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     private var themeImageObservers: [NSObjectProtocol] = []
     private(set) var keys: [SchemaKey] = []
     private(set) var deckErrors: [String] = []
+    /// One column of rows or two, side by side: the card sets two when the
+    /// editor is wide enough for both.
+    var columnCount = 1 {
+        didSet { if columnCount != oldValue, isViewLoaded { rebuild() } }
+    }
+    /// What is wrong with the deck's settings. A field with a problem is
+    /// tinted, with the problem's words under it and a button for its fix.
+    private(set) var problems: [DeckProblem] = []
+    /// The fix a problem's button performs, with the button's title; nil for none.
+    var problemFix: (DeckProblem) -> (title: String, perform: () -> Void)? = { _ in nil }
+    /// Runs after the rows are built again, when the form's height may have changed.
+    var onLayoutChange: (() -> Void)?
+    private var problemActions: [ObjectIdentifier: () -> Void] = [:]
+    private(set) var problemLabels: [String: NSTextField] = [:]
+    private(set) var problemFixButtons: [String: NSButton] = [:]
+    /// Whether a frontmatter tap cannot read replaces the fields with tap's
+    /// message. The Deck card shows such a frontmatter as text instead.
+    var showsErrorState = true
+    /// The side margin of the rows, inside the card.
+    private static let sideInset: CGFloat = 12
     /// Every field, by its key path joined with ".", such as "theme",
     /// "recording.output" or "drivers.sqlite.timeout".
     private(set) var fields: [String: NSControl] = [:]
@@ -70,7 +90,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 20, bottom: 20, right: 20)
+        stack.edgeInsets = NSEdgeInsets(top: 12, left: Self.sideInset, bottom: 12, right: Self.sideInset)
         stack.translatesAutoresizingMaskIntoConstraints = false
         errorTitleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         errorTitleLabel.textColor = EditorPalette.error
@@ -109,6 +129,19 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     func setSchema(_ keys: [SchemaKey]) {
         self.keys = keys
         if isViewLoaded { rebuild() }
+    }
+
+    /// Marks the fields with a problem. A different list rebuilds the rows.
+    func setProblems(_ newProblems: [DeckProblem]) {
+        guard newProblems != problems else { return }
+        problems = newProblems
+        if isViewLoaded { rebuild() }
+    }
+
+    /// The form's height as laid out now, for the card to size its body to.
+    var contentHeight: CGFloat {
+        view.layoutSubtreeIfNeeded()
+        return stack.frame.height
     }
 
     func setDeckErrors(_ errors: [String]) {
@@ -252,20 +285,24 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         }
         fields = [:]
         bindings = []
+        problemActions = [:]
+        problemLabels = [:]
+        problemFixButtons = [:]
         clearMapRows()
-        guard deckErrors.isEmpty else {
+        guard deckErrors.isEmpty || !showsErrorState else {
             errorLabel.stringValue = deckErrors[0]
             for label in [errorTitleLabel, errorLabel, errorHintLabel] {
                 stack.addArrangedSubview(label)
-                label.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+                label.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -2 * Self.sideInset).isActive = true
             }
             builtForEntries = [:]
+            onLayoutChange?()
             return
         }
         let frontmatter = Frontmatter(text: text())
         let scalars = keys.filter(\.isScalar)
         if !scalars.isEmpty {
-            addSection(title: "Deck", rows: scalars.map { row(for: $0, path: [$0.name]) })
+            addScalarSection(scalars.map { row(for: $0, path: [$0.name]) })
         }
         for key in keys where key.type == "object" {
             addSection(title: key.label, rows: key.keys.filter(\.isScalar).map { row(for: $0, path: [key.name, $0.name]) })
@@ -277,6 +314,23 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         refreshValues(from: frontmatter)
         // Set last: the rows above are what this shape was built for.
         builtForEntries = entries(in: frontmatter)
+        onLayoutChange?()
+    }
+
+    /// The deck's own settings: one card, or two side by side, without a
+    /// heading, since the Deck card's header says what they are.
+    private func addScalarSection(_ rows: [NSView]) {
+        guard columnCount > 1, rows.count > 1 else {
+            addSection(title: "Deck", rows: rows, showsTitle: false)
+            return
+        }
+        let half = (rows.count + 1) / 2
+        let columns = NSStackView(views: [FormCard(rows: Array(rows[..<half])), FormCard(rows: Array(rows[half...]))])
+        columns.orientation = .horizontal
+        columns.alignment = .top
+        columns.distribution = .fillEqually
+        columns.spacing = 12
+        addSection(title: "Deck", content: [columns], showsTitle: false)
     }
 
     func clearMapRows() {
@@ -488,16 +542,16 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     }
 
     /// A group whose fields are one card: the Deck keys, or an object key's.
-    func addSection(title: String, rows: [NSView]) {
-        addSection(title: title, content: [FormCard(rows: rows)])
+    func addSection(title: String, rows: [NSView], showsTitle: Bool = true) {
+        addSection(title: title, content: [FormCard(rows: rows)], showsTitle: showsTitle)
     }
 
     /// A group of the form, as wide as the form less its margins.
-    func addSection(title: String, content: [NSView]) {
-        let section = FormCard.section(title: title, content: content)
+    func addSection(title: String, content: [NSView], showsTitle: Bool = true) {
+        let section = FormCard.section(title: showsTitle ? title : nil, content: content)
         section.setAccessibilityIdentifier("deck-section-\(title)")
         stack.addArrangedSubview(section)
-        section.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+        section.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -2 * Self.sideInset).isActive = true
     }
 
     /// Every card of the form, top to bottom.
@@ -516,7 +570,50 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         label.lineBreakMode = .byTruncatingTail
         let control = makeControl(for: key, path: path)
         if control is NSTextField { control.widthAnchor.constraint(equalToConstant: 200).isActive = true }
-        return FormCard.row(leading: [label], trailing: [control])
+        let row = FormCard.row(leading: [label], trailing: [control])
+        guard let problem = problems.first(where: { $0.key == path.joined(separator: ".") }) else { return row }
+        return problemRow(row, for: problem)
+    }
+
+    /// A field's row with its problem: the whole row tinted, the problem's
+    /// words under the row, and the fix as a button.
+    private func problemRow(_ row: NSView, for problem: DeckProblem) -> NSView {
+        let isError = problem.severity == .error
+        let label = NSTextField(wrappingLabelWithString: problem.message)
+        label.font = .systemFont(ofSize: 11.5)
+        label.textColor = isError ? EditorPalette.error : EditorPalette.warning
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.setAccessibilityIdentifier("deck-problem-\(problem.key)")
+        problemLabels[problem.key] = label
+        var hintViews: [NSView] = [label]
+        if let fix = problemFix(problem) {
+            let button = NSButton(title: fix.title, target: self, action: #selector(problemFixPressed(_:)))
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            button.setAccessibilityIdentifier("deck-problem-fix-\(problem.key)")
+            problemActions[ObjectIdentifier(button)] = fix.perform
+            problemFixButtons[problem.key] = button
+            hintViews.append(button)
+        }
+        let hint = NSStackView(views: hintViews)
+        hint.orientation = .horizontal
+        hint.alignment = .firstBaseline
+        hint.spacing = 8
+        hint.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 8, right: 12)
+        let container = TintedStackView(views: [row, hint])
+        container.orientation = .vertical
+        container.alignment = .leading
+        container.spacing = 0
+        container.tint = isError ? EditorPalette.errorTint : EditorPalette.warningTint
+        row.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
+        hint.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
+        return container
+    }
+
+    @objc private func problemFixPressed(_ sender: NSButton) {
+        _ = commitEditing()
+        problemActions[ObjectIdentifier(sender)]?()
     }
 
     private func makeControl(for key: SchemaKey, path: [String]) -> NSControl {
@@ -620,5 +717,18 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         let loader = AppEnvironment.shared.themeImages
         if !view.isHiddenOrHasHiddenAncestor { loader.loadAll() }
         button.show(slug: slug, name: slug.map { loader.catalog?.name(forSlug: $0) ?? $0 } ?? "Default", image: loader.image(for: slug ?? ThemeGridViewController.defaultSlug))
+    }
+}
+
+/// A stack whose whole surface is tinted: a row with a problem.
+final class TintedStackView: NSStackView {
+    var tint: NSColor? {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let tint else { return }
+        tint.setFill()
+        bounds.fill()
     }
 }

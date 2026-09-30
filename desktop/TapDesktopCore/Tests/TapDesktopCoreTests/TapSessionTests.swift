@@ -87,7 +87,7 @@ final class TapSessionTests: XCTestCase {
         XCTAssertTrue(tap.log.text.contains("tap exited 3 times in 30 seconds"))
     }
 
-    func testADeckProblemStopsTapWithoutRestartingIt() async throws {
+    func testADeckProblemIsNotACrash() async throws {
         let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
         let tap = session(try FakeTap.rejectingTheDeck(recordingTo: record))
         var states: [TapSession.State] = []

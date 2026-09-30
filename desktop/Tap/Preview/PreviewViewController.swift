@@ -30,6 +30,16 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     let pageContainer = NSView()
 
     let overlay = PreviewOverlayView()
+    /// The deck's settings hold a mistake that keeps the preview from rendering.
+    let problemCard = DeckProblemCardView()
+    /// The deck renders with a fallback because of one of its settings: an unknown theme.
+    let themeBanner = PreviewBannerView()
+    private var pageTopBelowBanner: NSLayoutConstraint?
+    private var pageTopAtEdge: NSLayoutConstraint?
+    /// Choose Theme… on the banner.
+    var onChooseTheme: (() -> Void)?
+    /// Show in Editor on the problem card: the Deck card opens on the setting.
+    var onShowSettingProblemInEditor: ((DeckProblem) -> Void)?
     /// The slide as a text card, at full size over the page until its first paint.
     let placeholderCard = SlideCardView()
     /// The 2 pt line along the card's top edge while the page loads.
@@ -148,6 +158,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         overlay.tryAgainButton.target = self
         overlay.tryAgainButton.action = #selector(tryAgainPressed(_:))
         overlay.showLogButton.action = #selector(AppDelegate.showTapLog(_:))
+        problemCard.onShowInEditor = { [weak self] problem in self?.onShowSettingProblemInEditor?(problem) }
+        themeBanner.onChoose = { [weak self] in self?.onChooseTheme?() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -181,7 +193,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         stepRow.spacing = 10
         webView.translatesAutoresizingMaskIntoConstraints = false
         pageContainer.addSubview(webView)
-        for view in [placeholderCard, progressLine, overlay] as [NSView] {
+        for view in [placeholderCard, progressLine, overlay, problemCard] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             pageContainer.addSubview(view)
         }
@@ -193,12 +205,23 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         statusLabel.alphaValue = 0
         statusLabel.wantsLayer = true
         statusLabel.setAccessibilityIdentifier("preview-status")
-        for view in [pageContainer, stepRow, statusLabel] as [NSView] {
+        for view in [pageContainer, stepRow, statusLabel, themeBanner] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
+        let atEdge = pageContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 10)
+        let belowBanner = pageContainer.topAnchor.constraint(equalTo: themeBanner.bottomAnchor, constant: 10)
+        pageTopAtEdge = atEdge
+        pageTopBelowBanner = belowBanner
         NSLayoutConstraint.activate([
-            pageContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            atEdge,
+            themeBanner.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            themeBanner.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+            themeBanner.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            problemCard.topAnchor.constraint(equalTo: pageContainer.topAnchor),
+            problemCard.leadingAnchor.constraint(equalTo: pageContainer.leadingAnchor),
+            problemCard.trailingAnchor.constraint(equalTo: pageContainer.trailingAnchor),
+            problemCard.bottomAnchor.constraint(equalTo: pageContainer.bottomAnchor),
             pageContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
             pageContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
             pageContainer.heightAnchor.constraint(equalTo: pageContainer.widthAnchor, multiplier: 9.0 / 16.0),
@@ -226,6 +249,11 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
             statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: root.trailingAnchor, constant: -20),
         ])
         view = root
+        // A band asked for before the view existed already shows: the page sits below it.
+        if !themeBanner.isHidden {
+            atEdge.isActive = false
+            belowBanner.isActive = true
+        }
         overlay.onShow = { [weak self] in self?.endLoadingPlaceholder(animated: false) }
         if !hasPainted { beginLoadingPlaceholder() }
     }
@@ -553,13 +581,45 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         case .starting, .restarting:
             overlay.show(title: "Restarting preview.", detail: "Showing the last good render.", output: [], opaque: false, buttons: false)
         case .failed(let lastOutput):
-            overlay.show(title: "The preview stopped", detail: "\(restartPolicy.exitSummary). Last output:",
+            // tap quit; the text is safe in the editor. What tap printed is behind Details.
+            overlay.show(title: "The preview stopped", detail: "tap quit while showing this deck. Your text is safe.",
                          output: lastOutput, opaque: true, buttons: true)
+        case .invalidDeck:
+            // The problem card says which setting; nothing else to add.
+            overlay.hide()
         case .stopped:
             if let pausedMessage {
                 overlay.show(title: "The preview is paused", detail: pausedMessage, output: [], opaque: false, buttons: false)
             }
         }
+    }
+
+    // MARK: Problems with the deck's settings
+
+    /// Puts the problem card over the preview: the settings hold mistakes
+    /// tap cannot render past. The loading card ends, since something
+    /// other than loading says what happened.
+    func showSettingsProblems(_ problems: [DeckProblem], fixTitle: (DeckProblem) -> String?, rawLine: (DeckProblem) -> String?, fix: @escaping (DeckProblem) -> Void) {
+        problemCard.show(problems: problems, fixTitle: fixTitle, rawLine: rawLine, fix: fix)
+        endLoadingPlaceholder(animated: false)
+    }
+
+    func hideSettingsProblems() {
+        problemCard.hide()
+    }
+
+    /// The quiet band above the preview for an unknown theme, or none.
+    func showThemeBanner(unknownTheme name: String?, fixTitle: String? = nil, fix: (() -> Void)? = nil) {
+        guard let name else {
+            themeBanner.isHidden = true
+            pageTopBelowBanner?.isActive = false
+            pageTopAtEdge?.isActive = true
+            return
+        }
+        themeBanner.show(unknownTheme: name, fixTitle: fixTitle)
+        themeBanner.onFix = fix
+        pageTopAtEdge?.isActive = false
+        pageTopBelowBanner?.isActive = true
     }
 
     @objc private func tryAgainPressed(_ sender: NSButton) {

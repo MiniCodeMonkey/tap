@@ -1,7 +1,7 @@
 import XCTest
 @testable import Tap
 
-/// The Deck tab's layout at the inspector's width, as the DeckTabFields,
+/// The Deck card's form at the width the tests give it, as the DeckTabFields,
 /// DeckTabGroups and DeckTabDrivers boards draw it: each group a card as
 /// tall as its rows, the rows one under the other inside it, the cards
 /// one under the other, and the form as tall as all of them so it scrolls.

@@ -10,8 +10,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     let editorViewController = EditorViewController()
     let inspectorViewController = InspectorViewController()
     let previewViewController = PreviewViewController()
-    let deckForm = DeckFormViewController()
+    let deckCard = DeckCardController()
+    /// The form inside the Deck card.
+    var deckForm: DeckFormViewController { deckCard.form }
     private var schemaObserver: NSObjectProtocol?
+    /// tap's theme catalog arriving names the theme in the Deck card's summary.
+    private var themeCatalogObserver: NSObjectProtocol?
     let slidePanel = SlidePanelViewController()
     private(set) lazy var thumbnails = ThumbnailController(cache: AppEnvironment.shared.thumbnailCache, panel: slidePanel)
     /// True while a panel click moves the cursor, so the cursor's own
@@ -159,7 +163,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     var presentation: PresentationController {
         if let createdPresentation { return createdPresentation }
         let controller = PresentationController(
-            deckURL: { [weak self] in self?.document?.fileURL },
+            deckURL: { [weak self] in self?.presentableDeckURL },
             saveDeck: { [weak self] completion in
                 guard let self else { return completion(nil) }
                 self.saveForPresenting(completion: completion)
@@ -220,13 +224,34 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         session.log.append("reloading after the talk's approval, so the preview's blocks can run", source: .app)
     }
 
+    /// The file tap present reads: the deck's own, or for a deck that has
+    /// none yet, its private untitled file, which is what Play writes.
+    var presentableDeckURL: URL? {
+        guard let document else { return nil }
+        return document.fileURL ?? document.untitledDeckURL
+    }
+
     /// Writes the buffer to the deck file before a talk, because tap
     /// present reads the file. A buffer that already equals the file needs
     /// no write. A save the document refuses (a disk conflict is showing)
-    /// comes back as its error, and the talk does not start.
+    /// comes back as its error, and the talk does not start. A deck with
+    /// no file yet is not saved: the buffer goes to its private untitled
+    /// file, at once and without asking where to keep it, and the deck
+    /// stays unsaved.
     func saveForPresenting(completion: @escaping (Error?) -> Void) {
-        _ = deckForm.commitEditing()
-        guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
+        deckCard.commitEditing()
+        guard let document else { return completion(CocoaError(.fileNoSuchFile)) }
+        guard let url = document.fileURL else {
+            let text = editor.string
+            do {
+                try writeUntitledDeck(text, to: document.untitledDeckURL)
+                presentation.presentedText = text
+                completion(nil)
+            } catch {
+                completion(error)
+            }
+            return
+        }
         let text = editor.string
         guard isContentEdited else {
             presentation.presentedText = text
@@ -237,6 +262,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             if error == nil { self?.presentation.presentedText = text }
             completion(error)
         }
+    }
+
+    /// Writes `text` to an untitled deck's private file. tap dev hears
+    /// the app's own write named first, as for a save, so it does not
+    /// reload the pages for it, and then that the buffer is on disk.
+    func writeUntitledDeck(_ text: String, to url: URL) throws {
+        session.send(.saving(text: text))
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        session.send(.saved)
+        session.log.append("wrote the untitled deck for the talk", source: .app)
     }
 
     // MARK: Fix-its
@@ -275,7 +310,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// as an autosave would: an edited buffer gets the conflict bar, and the
     /// save is refused rather than written over the other program's change.
     func saveNow(completion: @escaping (Error?) -> Void) {
-        _ = deckForm.commitEditing()
+        deckCard.commitEditing()
         guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
         guard isContentEdited else { return completion(nil) }
         if document.diskIsNewerThanKnown {
@@ -587,18 +622,31 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
         deckForm.currentThemeSlug = { [weak self] in self?.currentThemeSlug }
         deckForm.setTheme = { [weak self] slug in self?.setTheme(slug) }
-        inspectorViewController.embedDeck(deckForm)
-        inspectorViewController.onTabChange = { [weak self] tab in
-            if tab == .deck { self?.deckForm.refresh() }
+        deckCard.text = { [weak self] in self?.editor.string ?? "" }
+        deckCard.schema = { AppEnvironment.shared.deckSchema.keys }
+        deckCard.deckURL = { [weak self] in self?.document?.fileURL }
+        deckCard.themeName = { slug in AppEnvironment.shared.themeImages.catalog?.name(forSlug: slug) ?? slug }
+        deckCard.applyEdit = { [weak self] replacement, actionName in
+            self?.editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
         }
+        deckCard.onProblemsChange = { [weak self] in self?.deckProblemsChanged() }
+        deckCard.attach(to: editor)
+        deckCard.restoreOpenState()
         applyDeckSchema()
         schemaObserver = NotificationCenter.default.addObserver(forName: DeckSchemaLoader.didLoadNotification, object: nil, queue: nil) { [weak self] _ in
             MainActor.assumeIsolated { self?.applyDeckSchema() }
+        }
+        themeCatalogObserver = NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: AppEnvironment.shared.themeImages, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.deckCard.refresh() }
         }
         Task { await AppEnvironment.shared.deckSchema.load() }
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
         previewViewController.onTryAgain = { [weak self] in self?.session.tryAgain() }
+        previewViewController.onChooseTheme = { [weak self] in
+            (self?.editor.window?.windowController as? DeckWindowController)?.showThemePopover(nil)
+        }
+        previewViewController.onShowSettingProblemInEditor = { [weak self] problem in self?.deckCard.showAndFocus(key: problem.key) }
         previewViewController.onRestartSession = { [weak self] in
             guard let self, !self.stopped, case .running = self.session.state else { return }
             self.session.restart()
@@ -645,13 +693,98 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         fileWatcher.watch(document.fileURL)
     }
 
-    /// The Deck tab needs tap's schema; until it has loaded the tab is disabled.
+    /// The Deck card's form needs tap's schema, which is also what says
+    /// which values a setting may have; until it has loaded the card shows
+    /// the summary without problems.
     private func applyDeckSchema() {
         let schema = AppEnvironment.shared.deckSchema
         guard schema.isLoaded else { return }
         deckForm.setSchema(schema.keys)
-        inspectorViewController.setDeckTabAvailable(true)
+        deckCard.refresh()
     }
+
+    /// What is wrong with the deck's settings changed.
+    private func deckProblemsChanged() {
+        refreshPreviewProblems()
+    }
+
+    /// The text at the moment tap stopped on a problem with the deck's
+    /// settings. tap starts again when the text changes and no longer holds one.
+    private var blockedText: String?
+
+    /// The problems that keep the preview from rendering: the ones in the
+    /// text now, or, when tap stopped on one this app does not read, the
+    /// ones tap reported for the text it stopped on.
+    var blockingProblems: [DeckProblem] {
+        let found = deckCard.errors
+        if !found.isEmpty { return found }
+        if case .invalidDeck(let reported) = session.state, editor.string == blockedText {
+            return reported.filter { $0.severity == .error }
+        }
+        return []
+    }
+
+    /// The problem card, the theme banner, the dimmed thumbnails and the
+    /// toolbar's Theme dot all follow the deck's settings.
+    func refreshPreviewProblems() {
+        guard !stopped else { return }
+        let blocking = blockingProblems
+        if blocking.isEmpty {
+            previewViewController.hideSettingsProblems()
+        } else {
+            previewViewController.showSettingsProblems(blocking, fixTitle: { [weak self] in self?.deckCard.fix(for: $0)?.title },
+                                                       rawLine: { [weak self] in self?.rawLine(of: $0) },
+                                                       fix: { [weak self] problem in
+                                                           guard let self, let fix = self.deckCard.fix(for: problem) else { return }
+                                                           self.deckCard.apply(fix)
+                                                       })
+        }
+        let theme = unknownThemeProblem
+        previewViewController.showThemeBanner(unknownTheme: theme?.value, fixTitle: theme.flatMap { deckCard.fix(for: $0)?.title },
+                                              fix: { [weak self] in
+                                                  guard let self, let theme = self.unknownThemeProblem, let fix = self.deckCard.fix(for: theme) else { return }
+                                                  self.deckCard.apply(fix)
+                                              })
+        var cannotRender = !blocking.isEmpty
+        switch session.state {
+        case .failed, .invalidDeck: cannotRender = true
+        default: break
+        }
+        slidePanel.setDimmed(cannotRender)
+        onThemeChanged?(currentThemeSlug)
+        restartAfterAFix()
+    }
+
+    /// The unknown theme tap renders as Base, if the deck names one.
+    var unknownThemeProblem: DeckProblem? {
+        deckCard.problems.first { $0.key == "theme" && $0.severity == .warning }
+    }
+
+    /// The setting's line as the deck writes it, for the problem card's Details.
+    private func rawLine(of problem: DeckProblem) -> String? {
+        let frontmatter = Frontmatter(text: editor.string)
+        return frontmatter.entry(at: problem.path).map { frontmatter.text(of: $0).trimmingCharacters(in: .newlines) }
+    }
+
+    /// tap stopped because of the deck's settings and does not start again
+    /// on its own. Once the text changes and holds no error, it is saved
+    /// (tap reads the file) and tap starts.
+    private func restartAfterAFix() {
+        guard case .invalidDeck = session.state, let blocked = blockedText, editor.string != blocked, deckCard.errors.isEmpty else { return }
+        blockedText = editor.string
+        saveNow { [weak self] error in
+            guard let self, !self.stopped, case .invalidDeck = self.session.state else { return }
+            if let error {
+                self.session.log.append("tap was not started after the fix: the save was refused: \(error.localizedDescription)", source: .app)
+                return
+            }
+            self.session.log.append("the deck's settings changed; starting tap again", source: .app)
+            self.session.start()
+        }
+    }
+
+    /// The problems of the deck's settings, read from the text now.
+    var deckProblems: [DeckProblem] { deckCard.problems }
 
     /// The document is edited exactly when the editor's text differs from
     /// the deck file's content, as last read from disk (open, revert) or as
@@ -917,6 +1050,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     func start() {
         editor.load(text: document?.text ?? "")
+        deckCard.refresh()
         refreshCards()
         session.start()
     }
@@ -989,6 +1123,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         occlusionObserver = nil
         if let schemaObserver { NotificationCenter.default.removeObserver(schemaObserver) }
         schemaObserver = nil
+        if let themeCatalogObserver { NotificationCenter.default.removeObserver(themeCatalogObserver) }
+        themeCatalogObserver = nil
         pendingRecentThumbnailCheck?.cancel()
         pendingRecentThumbnailCheck = nil
         socket?.close()
@@ -1006,6 +1142,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if text != editor.string {
             editor.load(text: text)
             sourceSync.textDidChange()
+            deckCard.refresh()
         }
         refreshEditedState()
         // Set, not reported: the toolbar item reads currentThemeSlug itself when it is built.
@@ -1279,8 +1416,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshCards()
         slidePanel.setSlides(editor.boxes.map(\.slide))
         thumbnails.deckChanged()
-        deckForm.setDeckErrors(list.errors)
-        deckForm.refresh()
+        deckCard.setDeckErrors(list.errors)
+        deckCard.refresh()
         if let first = list.errors.first {
             if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
                 editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",
@@ -1352,7 +1489,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                 onQuestionsDropped?()
             }
         }
+        if case .invalidDeck = state { blockedText = editor.string }
         previewViewController.showSessionState(state, restartPolicy: session.restartPolicy, pausedMessage: pausedMessage)
+        refreshPreviewProblems()
         socket?.close()
         socket = nil
         guard case .running(let ready) = state else {
@@ -1409,7 +1548,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
         refreshEditedState()
         Task { await sourceSync.sendNow() }
-        deckForm.refresh()
+        deckCard.refresh()
         refreshThemeIfChanged()
     }
 
@@ -1418,7 +1557,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func editorTextDidChange(_ editor: EditorTextView) {
         refreshEditedState()
         sourceSync.textDidChange()
-        deckForm.refresh()
+        deckCard.refresh()
         if slidePanel.slides.isEmpty { refreshCards() }
         refreshThemeIfChanged()
     }

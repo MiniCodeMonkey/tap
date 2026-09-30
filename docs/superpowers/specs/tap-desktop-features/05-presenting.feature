@@ -27,7 +27,7 @@ Feature: Presenting
 
   Scenario: Play is dimmed while tap gets ready
     When a deck opens and tap has not started yet
-    Then the Play glyph and its chevron are dimmed and breathe slowly, and the tooltip says "Getting the slides ready…"
+    Then the Play glyph, and only the glyph, is dimmed and breathes slowly, and the tooltip says "Getting the slides ready…"
     When tap is ready
     Then the glyph is solid and the tooltip is the usual one
     And with Reduce Motion on the glyph is dimmed and still
@@ -41,6 +41,13 @@ Feature: Presenting
     Given "talk.md" has unsaved edits
     When I click Play or Rehearse
     Then the app saves the buffer first, because tap present reads the file
+
+  Scenario: Play on an untitled deck
+    Given a deck that has no file yet, such as the theme tour
+    When I click Play, choose Present > Play, or press Cmd+Option+P
+    Then the app writes the editor's text to the deck's private untitled file at once, and shows no save prompt
+    And the talk shows that text, and the deck stays unsaved
+    And an edit I make while presenting reaches the audience the way it does for a saved deck: Reload Slides writes the file again
 
   Scenario: Nothing interrupts the talk
     While I am presenting or rehearsing

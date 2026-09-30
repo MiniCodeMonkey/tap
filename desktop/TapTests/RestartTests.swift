@@ -46,6 +46,27 @@ final class RestartTests: HostedTestCase {
         try await waitUntil(timeout: 15, "the preview to come back") { overlay.isHidden && controller.previewViewController.lastReady != nil }
     }
 
+    func testAnUnexpectedStopIsCalm() async throws {
+        let bundled = AppEnvironment.shared.tapExecutableURL
+        AppEnvironment.shared.tapExecutableURL = try FakeTapScripts.crashing()
+        defer { AppEnvironment.shared.tapExecutableURL = bundled }
+
+        let document = try await openDeck(try Fixtures.copyAppFixture())
+        let controller = try XCTUnwrap(document.sessionController)
+        let overlay = controller.previewViewController.overlay
+        try await waitUntil(timeout: 15, "the stopped preview") { overlay.titleLabel.stringValue == "The preview stopped" }
+        XCTAssertEqual(overlay.detailLabel.stringValue, "tap quit while showing this deck. Your text is safe.")
+        XCTAssertEqual(overlay.tryAgainButton.title, "Restart Preview")
+        XCTAssertEqual(overlay.showLogButton.title, "Show Tap Log")
+        XCTAssertTrue(overlay.outputLabel.isHidden, "tap's raw output is not on the notice")
+        XCTAssertFalse(overlay.detailsButton.isHidden)
+        overlay.detailsButton.performClick(nil)
+        XCTAssertFalse(overlay.outputLabel.isHidden, "it is behind Details")
+        XCTAssertTrue(overlay.outputLabel.stringValue.contains("panic: runtime error: index out of range"))
+        XCTAssertTrue(controller.previewViewController.problemCard.isHidden, "the deck's settings are fine: no problem card")
+        XCTAssertTrue(controller.slidePanel.isDimmed, "the thumbnails dim while the preview cannot render")
+    }
+
     func testTapKeepsFailing() async throws {
         let bundled = AppEnvironment.shared.tapExecutableURL
         AppEnvironment.shared.tapExecutableURL = try FakeTapScripts.crashing()
@@ -56,7 +77,7 @@ final class RestartTests: HostedTestCase {
         let overlay = controller.previewViewController.overlay
         try await waitUntil(timeout: 15, "the stopped preview") { overlay.titleLabel.stringValue == "The preview stopped" }
         XCTAssertFalse(overlay.isHidden)
-        XCTAssertEqual(overlay.detailLabel.stringValue, "tap exited 3 times in 30 seconds. Last output:")
+        XCTAssertEqual(overlay.detailLabel.stringValue, "tap quit while showing this deck. Your text is safe.")
         XCTAssertTrue(overlay.outputLabel.stringValue.contains("panic: runtime error: index out of range"))
         XCTAssertFalse(overlay.tryAgainButton.isHidden)
         XCTAssertFalse(overlay.showLogButton.isHidden)

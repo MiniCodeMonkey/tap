@@ -64,14 +64,36 @@ Feature: Slide structure in the editor
     Then a box header shows the step count, for example "2 steps"
     And a live-code badge with the driver, for example "sqlite"
 
-  Scenario: The editor never folds
+  Scenario: The Deck card is the one thing that folds
     Then every line of every slide is always visible in the editor
+    And above slide 1 sits the Deck card, always present, the one element of the editor that folds
+    And closed, it is one line: "Deck" and chips for the theme, the aspect ratio, and the author when set
+    When I click the card, or focus it and press Space
+    Then it opens, and it stays open or closed as I left it the next time this deck opens
 
-  Scenario: Deck settings live in the inspector
-    Then the frontmatter text is hidden from the editor, and slide 1 is the first box
-    When I choose the "Deck" tab in the inspector (Preview | Deck)
-    Then I see a form with one field per frontmatter key tap knows
+  Scenario: Deck settings live in the Deck card
+    Then the frontmatter text is hidden from the editor while the card is in Form, and slide 1 is the first box
+    When I open the Deck card
+    Then I see a form with one field per frontmatter key tap knows, in two columns when the editor is wide and one when it is narrow
     And the fields, types, and allowed values come from "tap deck schema --json"   # NEW
     And changing a field rewrites that key in the frontmatter as one undo step
     And keys the form does not know stay untouched, and are listed as "Other keys" to edit as text
+    And the inspector shows the preview only
+
+  Scenario: The Deck card shows the frontmatter as text
+    Given the Deck card is open
+    When I choose "Text" in its Form | Text switch
+    Then the frontmatter's own lines are shown in the editor, under the card's header, and I edit them in place
+    And an edit there is one undo step in the editor's own undo stack, the same as a change in the form
+
+  Scenario: A deck with no frontmatter has a Deck card
+    Given a deck with no frontmatter
+    Then the Deck card is above slide 1, closed
+    When I open it and change a field
+    Then a frontmatter block with that one key is written above slide 1, as one undo step
+
+  Scenario: Frontmatter that does not parse opens the Deck card as text
+    Given the frontmatter has a line tap cannot read
+    Then the Deck card opens by itself in Text, with the failing line marked
+
 

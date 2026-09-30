@@ -1056,7 +1056,7 @@ func TestAppDevReportsAnUnknownThemeAfterTheReadyLine(t *testing.T) {
 	}
 }
 
-func TestAppDevReportsBufferProblemsAndTheirFix(t *testing.T) {
+func TestTapReportsDeckProblems(t *testing.T) {
 	deck := filepath.Join(t.TempDir(), "buffer.md")
 	if err := os.WriteFile(deck, []byte("---\ntheme: base\n---\n\n# Buffer\n"), 0o644); err != nil {
 		t.Fatal(err)

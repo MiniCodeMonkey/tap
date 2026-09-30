@@ -52,6 +52,8 @@ final class EditorTextView: NSTextView {
 
     private enum Role: Hashable {
         case outsideText, separator, blankGap, boxMiddle, boxLast
+        /// A line of the frontmatter shown in the Deck card's Text mode, and its closing line.
+        case frontmatterLine, frontmatterLast
         case boxFirst(errors: Int)
         case boxOnly(errors: Int)
     }
@@ -69,6 +71,8 @@ final class EditorTextView: NSTextView {
         case .blankGap: height = 4
         case .boxFirst(let errors): style.paragraphSpacingBefore = spacingBefore(errors)
         case .boxLast: style.paragraphSpacing = boxPaddingBottom + 4
+        case .frontmatterLine: break
+        case .frontmatterLast: style.paragraphSpacing = deckCardPadding + deckCardGap - firstBoxTopOffset
         case .boxOnly(let errors):
             style.paragraphSpacingBefore = spacingBefore(errors)
             style.paragraphSpacing = boxPaddingBottom + 4
@@ -123,6 +127,7 @@ final class EditorTextView: NSTextView {
         // Replacing the whole document otherwise leaves the caret at the end,
         // where the text system moved it to follow the insertion.
         setSelectedRange(NSRange(location: 0, length: 0))
+        refreshDeclaredDrivers()
         restyle(NSRange(location: 0, length: (text as NSString).length))
         updateHiddenLayout()
     }
@@ -147,6 +152,7 @@ final class EditorTextView: NSTextView {
             textStorage?.endEditing()
         }
         updateHiddenLayout()
+        refreshFrontmatterStyling()
         updateCurrentBox()
         needsDisplay = true
         return true
@@ -178,8 +184,13 @@ final class EditorTextView: NSTextView {
     private(set) var declaredDrivers: [String] = []
 
     private func refreshDeclaredDrivers() {
-        declaredDrivers = Frontmatter(text: string).declaredDrivers
+        let parsed = Frontmatter(text: string)
+        frontmatterBlock = parsed
+        declaredDrivers = parsed.declaredDrivers
     }
+
+    /// The frontmatter as parsed at the last change of the text.
+    private(set) var frontmatterBlock = Frontmatter(text: "")
 
     /// The header of a box as drawn, hit tested and offered in menus. While
     /// tap reports a problem with the frontmatter it offers no fix-it.
@@ -240,8 +251,14 @@ final class EditorTextView: NSTextView {
         return false
     }
 
+    /// The length of the text layout skips: the frontmatter, unless the
+    /// Deck card shows it as text.
+    private var effectiveHiddenLength: Int {
+        deckCardDisplay == .text ? 0 : tracker.hiddenPrefixLength
+    }
+
     private func updateHiddenLayout() {
-        let hidden = tracker.hiddenPrefixLength
+        let hidden = effectiveHiddenLength
         guard hidden != layoutHiddenLength, let layoutManager = textLayoutManager else { return }
         layoutHiddenLength = hidden
         layoutManager.invalidateLayout(for: layoutManager.documentRange)
@@ -249,9 +266,218 @@ final class EditorTextView: NSTextView {
         setSelectedRanges(selectedRanges, affinity: selectionAffinity, stillSelecting: false)
     }
 
+    // MARK: The Deck card
+
+    /// What the Deck card shows under its header.
+    enum DeckCardDisplay: Equatable {
+        case collapsed
+        /// The schema's form, in a body under the header.
+        case form
+        /// The frontmatter's own lines, in the editor's text, under the header.
+        case text
+    }
+
+    /// How a problem tints the card: nothing, an amber warning, a red error.
+    enum DeckCardTint: Equatable {
+        case none, warning, error
+    }
+
+    static let deckCardTop: CGFloat = 16
+    static let deckCardHeaderHeight: CGFloat = 40
+    static let deckCardGap: CGFloat = 12
+    static let deckCardPadding: CGFloat = 8
+    /// A box's rectangle starts this far below the top of the text
+    /// container's inset: the paragraph spacing before its first line, less
+    /// the header and padding drawn above the line.
+    static let firstBoxTopOffset: CGFloat = 4
+
+    private(set) var deckCardDisplay: DeckCardDisplay = .collapsed
+    private(set) var deckCardBodyHeight: CGFloat = 0
+    private(set) var deckCardTint: DeckCardTint = .none
+    private(set) var deckCardView: NSView?
+    /// The 0-based lines of the deck's text that a problem names: the failing
+    /// line of frontmatter that does not parse, in red, and the lines of
+    /// settings with a problem, tinted red or amber. Drawn in Text mode.
+    private(set) var deckCardMarkedLines: [(line: Int, isError: Bool)] = []
+    /// Runs when the card's width changes, so its form can lay itself out in one column or two.
+    var onDeckCardWidthChange: (() -> Void)?
+    private var lastDeckCardWidth: CGFloat = 0
+    private var styledFrontmatterLength = 0
+
+    /// Puts the card's view on the editor, above the text it stands over.
+    func installDeckCard(_ card: NSView) {
+        deckCardView?.removeFromSuperview()
+        deckCardView = card
+        addSubview(card)
+        layoutDeckCard()
+    }
+
+    /// Sets what the card shows. The text starts below the card, or in it
+    /// in Text mode, and the frontmatter's lines come into view or leave it.
+    func setDeckCard(display: DeckCardDisplay, bodyHeight: CGFloat, tint: DeckCardTint, markedLines: [(line: Int, isError: Bool)]) {
+        deckCardDisplay = display
+        deckCardBodyHeight = display == .form ? bodyHeight : 0
+        deckCardTint = tint
+        deckCardMarkedLines = markedLines
+        let top = Self.deckCardTop + (display == .text ? Self.deckCardHeaderHeight + 6 : deckCardHeight + Self.deckCardGap - Self.firstBoxTopOffset)
+        if textContainerInset.height != top { textContainerInset = NSSize(width: Self.horizontalInset, height: top) }
+        updateHiddenLayout()
+        refreshFrontmatterStyling()
+        layoutDeckCard()
+        needsDisplay = true
+    }
+
+    /// The header and, in form mode, the body.
+    var deckCardHeight: CGFloat { Self.deckCardHeaderHeight + deckCardBodyHeight }
+
+    /// The card's left and right edges, level with the boxes'.
+    private var deckCardHorizontalRange: (left: CGFloat, width: CGFloat) {
+        let left = Self.horizontalInset - Self.boxOutset
+        return (left, max(0, bounds.width - 2 * left))
+    }
+
+    /// Where the card's view sits: over the header, and over the body in form mode.
+    func layoutDeckCard() {
+        guard let deckCardView else { return }
+        let horizontal = deckCardHorizontalRange
+        let frame = NSRect(x: horizontal.left, y: Self.deckCardTop, width: horizontal.width, height: deckCardHeight)
+        if deckCardView.frame != frame { deckCardView.frame = frame }
+        if abs(horizontal.width - lastDeckCardWidth) > 0.5 {
+            lastDeckCardWidth = horizontal.width
+            onDeckCardWidthChange?()
+        }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        layoutDeckCard()
+    }
+
+    /// The card's surface in view coordinates. In Text mode it reaches down
+    /// to the frontmatter's closing line.
+    func deckCardRect() -> NSRect {
+        let horizontal = deckCardHorizontalRange
+        var height = deckCardHeight
+        if deckCardDisplay == .text, let bottom = frontmatterBottom() { height = max(height, bottom + Self.deckCardPadding - Self.deckCardTop) }
+        return NSRect(x: horizontal.left, y: Self.deckCardTop, width: horizontal.width, height: height)
+    }
+
+    /// The lines of the frontmatter shown as text: none unless the card is in Text mode.
+    /// With frontmatter tap reads, the layout's hidden text; with frontmatter it does not, the block itself.
+    var frontmatterTextRegion: NSRange? {
+        guard deckCardDisplay == .text else { return nil }
+        if deckErrors.isEmpty {
+            let hidden = tracker.hiddenPrefixLength
+            return hidden > 0 ? NSRange(location: 0, length: hidden) : nil
+        }
+        if let range = frontmatterBlock.range { return range }
+        guard frontmatterBlock.isUnterminated else { return nil }
+        // A frontmatter that never closes runs to the first blank line or heading.
+        let text = string as NSString
+        var location = 0
+        var lineNumber = 0
+        while location < text.length {
+            let line = text.lineRange(for: NSRange(location: location, length: 0))
+            let content = text.substring(with: line).trimmingCharacters(in: .whitespacesAndNewlines)
+            if lineNumber > 0, content.isEmpty || content.hasPrefix("#") { break }
+            location = NSMaxRange(line)
+            lineNumber += 1
+        }
+        return NSRange(location: 0, length: location)
+    }
+
+    /// Restyles the frontmatter's lines when the region they are shown in
+    /// changed: they take the text roles when shown, the outside roles when hidden again.
+    private func refreshFrontmatterStyling(wrapsEditing: Bool = true) {
+        let length = frontmatterTextRegion.map(NSMaxRange) ?? 0
+        guard length != styledFrontmatterLength else { return }
+        let reach = max(length, styledFrontmatterLength)
+        styledFrontmatterLength = length
+        // Called from the text storage's own end-of-edit callback, the attributes are set inside that edit.
+        if wrapsEditing { textStorage?.beginEditing() }
+        restyle(NSRange(location: 0, length: min(reach, (string as NSString).length)))
+        if wrapsEditing { textStorage?.endEditing() }
+    }
+
+    /// The bottom, in view coordinates, of the frontmatter's closing line.
+    private func frontmatterBottom() -> CGFloat? {
+        guard let region = frontmatterTextRegion, region.length > 0 else { return nil }
+        let closingEnd = frontmatterBlock.range.map(NSMaxRange) ?? NSMaxRange(region)
+        return lineRect(atCharacter: max(0, min(closingEnd, region.length) - 1))?.maxY
+    }
+
+    /// The rectangle of the line fragment holding a character, across the
+    /// card, in view coordinates; nil when layout has no such line.
+    private func lineRect(atCharacter index: Int) -> NSRect? {
+        guard let contentManager = textContentStorage, let layoutManager = textLayoutManager,
+              let location = contentManager.location(contentManager.documentRange.location, offsetBy: index) else { return nil }
+        if let through = NSTextRange(location: contentManager.documentRange.location, end: contentManager.location(location, offsetBy: 1) ?? location) {
+            layoutManager.ensureLayout(for: through)
+        }
+        guard let fragment = layoutManager.textLayoutFragment(for: location) else { return nil }
+        let offset = contentManager.offset(from: fragment.rangeInElement.location, to: location)
+        let lines = fragment.textLineFragments
+        guard let line = lines.first(where: { NSLocationInRange(offset, $0.characterRange) }) ?? lines.last else { return nil }
+        let horizontal = deckCardHorizontalRange
+        return NSRect(x: horizontal.left, y: fragment.layoutFragmentFrame.minY + line.typographicBounds.minY + textContainerOrigin.y,
+                      width: horizontal.width, height: line.typographicBounds.height)
+    }
+
+    /// The character index where a line of the deck's text starts.
+    private func characterIndex(ofLine line: Int) -> Int? {
+        let text = string as NSString
+        var location = 0
+        for _ in 0..<line {
+            guard location < text.length else { return nil }
+            location = NSMaxRange(text.lineRange(for: NSRange(location: location, length: 0)))
+        }
+        return location < text.length ? location : nil
+    }
+
+    /// Moves the caret to the start of the frontmatter, for Show Deck Settings in Text mode.
+    func moveCursorToFrontmatter() {
+        setSelectedRange(NSRange(location: 0, length: 0))
+        scrollToVisible(NSRect(x: 0, y: 0, width: 1, height: deckCardRect().maxY))
+    }
+
+    private func drawDeckCard(in dirtyRect: NSRect) {
+        let rect = deckCardRect()
+        guard rect.intersects(dirtyRect) else { return }
+        let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+        switch deckCardTint {
+        case .none: EditorPalette.boxFill.setFill()
+        case .warning: EditorPalette.warningTint.setFill()
+        case .error: EditorPalette.errorTint.setFill()
+        }
+        path.fill()
+        if deckCardDisplay == .text {
+            for marked in deckCardMarkedLines {
+                guard let index = characterIndex(ofLine: marked.line), let line = lineRect(atCharacter: index) else { continue }
+                (marked.isError ? EditorPalette.error : EditorPalette.warning).withAlphaComponent(0.16).setFill()
+                NSRect(x: line.minX + 1, y: line.minY, width: line.width - 2, height: line.height).fill()
+            }
+        }
+        switch deckCardTint {
+        case .none: EditorPalette.boxBorder.setStroke()
+        case .warning: EditorPalette.warningTintBorder.setStroke()
+        case .error: EditorPalette.errorTintBorder.setStroke()
+        }
+        path.lineWidth = 1
+        path.stroke()
+        if deckCardDisplay != .collapsed {
+            EditorPalette.boxBorder.setFill()
+            NSRect(x: rect.minX + 1, y: rect.minY + Self.deckCardHeaderHeight, width: rect.width - 2, height: 0.5).fill()
+        }
+    }
+
     // MARK: Styling
 
-    private func role(for paragraph: NSRange, line: String) -> Role {
+    private func role(for paragraph: NSRange, line: String, region frontmatterRegion: NSRange?) -> Role {
+        if let region = frontmatterRegion, paragraph.location < NSMaxRange(region) {
+            let closingEnd = frontmatterBlock.range.map(NSMaxRange) ?? NSMaxRange(region)
+            if paragraph.location >= closingEnd { return .blankGap }
+            return NSMaxRange(paragraph) >= closingEnd ? .frontmatterLast : .frontmatterLine
+        }
         if let index = tracker.boxIndex(containing: paragraph.location) {
             let box = boxes[index]
             let errors = Self.errorLineCount(for: box.slide)
@@ -275,6 +501,8 @@ final class EditorTextView: NSTextView {
         var color = NSColor.labelColor
         var obliqueness: Double = 0
         switch role {
+        case .frontmatterLine, .frontmatterLast:
+            break
         case .separator, .blankGap:
             font = Self.smallFont
             color = .tertiaryLabelColor
@@ -319,8 +547,15 @@ final class EditorTextView: NSTextView {
         } while location < NSMaxRange(whole)
         let lines = paragraphs.map { text.substring(with: $0).trimmingCharacters(in: .newlines) }
         let styles = Highlighter.styles(for: lines)
+        let frontmatterRegion = frontmatterTextRegion
         for (index, paragraph) in paragraphs.enumerated() where paragraph.length > 0 {
-            storage.setAttributes(attributes(style: styles[index], role: role(for: paragraph, line: lines[index])), range: paragraph)
+            let paragraphRole = role(for: paragraph, line: lines[index], region: frontmatterRegion)
+            var paragraphAttributes = attributes(style: styles[index], role: paragraphRole)
+            if paragraphRole == .frontmatterLine || paragraphRole == .frontmatterLast {
+                // YAML is not Markdown: a comment is not a heading. Only the delimiters are quiet.
+                paragraphAttributes[.foregroundColor] = lines[index].trimmingCharacters(in: .whitespaces) == "---" ? NSColor.tertiaryLabelColor : NSColor.labelColor
+            }
+            storage.setAttributes(paragraphAttributes, range: paragraph)
         }
     }
 
@@ -368,6 +603,7 @@ final class EditorTextView: NSTextView {
 
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
+        drawDeckCard(in: rect)
         drawBoxes(in: rect)
     }
 
@@ -1095,10 +1331,12 @@ extension EditorTextView: NSTextStorageDelegate {
                      range editedRange: NSRange, changeInLength delta: Int) {
         guard editedMask.contains(.editedCharacters) else { return }
         tracker.recordEdit(location: editedRange.location, oldLength: editedRange.length - delta, newLength: editedRange.length)
-        restyle(editedRange)
         refreshDeclaredDrivers()
+        restyle(editedRange)
+        refreshFrontmatterStyling(wrapsEditing: false)
         needsDisplay = true
-        if tracker.hiddenPrefixLength != layoutHiddenLength {
+        if deckCardDisplay == .text { DispatchQueue.main.async { [weak self] in self?.layoutDeckCard() } }
+        if effectiveHiddenLength != layoutHiddenLength {
             // Layout cannot change while the text storage is processing an edit.
             DispatchQueue.main.async { [weak self] in self?.updateHiddenLayout() }
         }

@@ -21,6 +21,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let newSlideButton = NewSlideButton()
     /// The toolbar's Theme button: shows the deck's theme name, click opens the theme popover.
     let themeButton = NSButton()
+    /// The amber dot on the Theme button while the deck names a theme tap does not know.
+    let themeWarningDot = AmberDotView()
+    private weak var themeToolbarItem: NSToolbarItem?
     /// The toolbar's Play control: a click plays at once, and holding it or its chevron opens the play menu.
     let playButton = PlaySplitControl()
     /// The theme grid in a popover, for the toolbar's Theme item.
@@ -280,17 +283,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         controller.window?.makeKeyAndOrderFront(nil)
     }
 
-    /// View > Preview (Cmd+Option+1). A hidden pane (Cmd+Option+0) comes back, or the tab would change out of sight.
-    @objc func showPreviewTab(_ sender: Any?) {
+    /// View > Preview (Cmd+Option+1): a hidden pane (Cmd+Option+0) comes back.
+    @objc func showPreview(_ sender: Any?) {
         if previewWindowController == nil, splitViewController.isPreviewHidden { splitViewController.setPreviewHidden(false) }
-        sessionController.inspectorViewController.showTab(.preview)
     }
 
-    /// View > Deck (Cmd+Option+2): the frontmatter's form. Disabled until tap's schema has loaded.
-    @objc func showDeckTab(_ sender: Any?) {
-        guard AppEnvironment.shared.deckSchema.isLoaded else { return }
-        if splitViewController.isPreviewHidden { splitViewController.setPreviewHidden(false) }
-        sessionController.inspectorViewController.showTab(.deck)
+    /// View > Show Deck Settings (Cmd+Option+2): the Deck card at the top
+    /// of the editor opens and takes the focus.
+    @objc func showDeckSettings(_ sender: Any?) {
+        sessionController.deckCard.showAndFocus()
     }
 
     /// Puts the preview back next to the editor.
@@ -300,6 +301,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         controller.window?.contentViewController = nil
         sessionController.inspectorViewController.embed(sessionController.previewViewController)
         splitViewController.setPreviewHidden(false)
+        sessionController.refreshPreviewProblems()
     }
 
     private(set) var goToSlideController: GoToSlideController?
@@ -524,7 +526,22 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// The item's title is the theme's name from tap's catalog, the slug
     /// while the catalog loads, and "Default" for a deck that names none
     /// (the grid's Default cell, tap's default theme).
+    ///
+    /// A theme tap does not know renders as Base: the item then reads
+    /// "Base", with an amber dot and a tooltip that says why.
     func refreshThemeItem(slug: String?) {
+        let defaultTip = "The deck's theme. Click to pick another; tap theme set writes it."
+        if let unknown = sessionController.unknownThemeProblem {
+            themeButton.title = AppEnvironment.shared.themeImages.catalog?.name(forSlug: "base") ?? "Base"
+            themeWarningDot.isHidden = false
+            let tip = "\u{201C}\(unknown.value)\u{201D} is not a tap theme, so the preview uses Base. Click to pick another."
+            themeButton.toolTip = tip
+            themeToolbarItem?.toolTip = tip
+            return
+        }
+        themeWarningDot.isHidden = true
+        themeButton.toolTip = nil
+        themeToolbarItem?.toolTip = defaultTip
         guard let slug else { return themeButton.title = "Default" }
         themeButton.title = AppEnvironment.shared.themeImages.catalog?.name(forSlug: slug) ?? slug
     }
@@ -1199,7 +1216,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if menuItem.action == #selector(togglePreview(_:)) {
             menuItem.title = splitViewController.isPreviewHidden ? "Show Preview" : "Hide Preview"
         }
-        if menuItem.action == #selector(showDeckTab(_:)) { return AppEnvironment.shared.deckSchema.isLoaded }
+        if menuItem.action == #selector(showDeckSettings(_:)) { return true }
         if menuItem.action == #selector(toggleSlidePanel(_:)) {
             menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
         }
@@ -1340,6 +1357,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             themeButton.setAccessibilityIdentifier("theme-button")
             themeButton.target = self
             themeButton.action = #selector(showThemePopover(_:))
+            themeWarningDot.translatesAutoresizingMaskIntoConstraints = false
+            themeButton.addSubview(themeWarningDot)
+            NSLayoutConstraint.activate([
+                themeWarningDot.trailingAnchor.constraint(equalTo: themeButton.trailingAnchor, constant: -3),
+                themeWarningDot.topAnchor.constraint(equalTo: themeButton.topAnchor, constant: 3),
+                themeWarningDot.widthAnchor.constraint(equalToConstant: 8),
+                themeWarningDot.heightAnchor.constraint(equalToConstant: 8),
+            ])
+            themeToolbarItem = item
             refreshThemeItem(slug: sessionController.currentThemeSlug)
             item.view = themeButton
             return item
@@ -1354,4 +1380,24 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         item.action = #selector(togglePreview(_:))
         return item
     }
+}
+
+/// A small amber dot, drawn over a button that has something to say. It takes no clicks.
+final class AmberDotView: NSView {
+    init() {
+        super.init(frame: .zero)
+        setAccessibilityIdentifier("theme-warning-dot")
+        setAccessibilityElement(false)
+        isHidden = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        EditorPalette.warning.setFill()
+        NSBezierPath(ovalIn: bounds).fill()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

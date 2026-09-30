@@ -328,6 +328,9 @@ final class PresentationController {
             tapIsReady(ready)
         case .failed(let lastOutput):
             endBecauseTapFailed(lastOutput: lastOutput)
+        case .invalidDeck(let problems):
+            // tap present read settings it cannot render: the talk does not start, and the words say which.
+            fail("The deck\u{2019}s settings need a fix before it can play. " + problems.filter { $0.severity == .error }.map(\.message).joined(separator: " "))
         case .stopped:
             // tap present is gone or going: its questions die with it, and
             // a sheet still up for one must not answer the next process, whose ids start at q1 again.

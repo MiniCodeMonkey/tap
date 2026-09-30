@@ -13,6 +13,11 @@ Feature: Menus and shortcuts
     When I right-click a thumbnail or a box header
     Then I see New Slide After, Duplicate, Delete, Move to Top, Move to Bottom, and Copy
 
+  Scenario: Deck settings from the View menu
+    Then the View menu has "Show Deck Settings" with Cmd+Option+2, and "Show Preview" with Cmd+Option+1
+    When I choose "Show Deck Settings"
+    Then the Deck card opens and takes the focus
+
   Scenario: Go to slide
     When I press Cmd+Shift+O and type "ro"
     Then the outline lists matching slide titles and Return jumps to the slide
