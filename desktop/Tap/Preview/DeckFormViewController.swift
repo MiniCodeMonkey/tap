@@ -187,8 +187,11 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     /// focused field whose text was written follows the deck, so an undo
     /// changes what it shows instead of leaving it to be written back on blur.
     private func hasUncommittedTyping(_ editing: NSText, in control: NSControl) -> Bool {
-        editing.string != control.stringValue
+        editing.string != (shownTexts[ObjectIdentifier(control)] ?? control.stringValue)
     }
+
+    /// What each text field last showed or wrote, to tell typing from a value the deck already holds.
+    private var shownTexts: [ObjectIdentifier: String] = [:]
 
     private func refreshValues(from frontmatter: Frontmatter) {
         isRefreshing = true
@@ -221,6 +224,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             toggle.state = ["true", "yes", "on"].contains(text.lowercased()) ? .on : .off
         case let field as NSTextField:
             field.stringValue = value.map(Frontmatter.unquoted) ?? ""
+            shownTexts[ObjectIdentifier(field)] = field.stringValue
             field.placeholderString = key.defaultValue
         default:
             break
@@ -700,6 +704,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             return
         }
         applyEdit(replacement, "Change \(key.label)")
+        if sender is NSTextField { shownTexts[ObjectIdentifier(sender)] = sender.stringValue }
         if !isRebuilding { refresh() }
     }
 
