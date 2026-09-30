@@ -25,6 +25,7 @@ final class SlideDragUITests: UITestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 30))
         let box5 = application.groups["box-5"].firstMatch
         let box3 = application.groups["box-3"].firstMatch
+        scrollHeaders(of: box5, and: box3, in: application)
         XCTAssertTrue(box5.waitForExistence(timeout: 30))
         box5.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
             .click(forDuration: 0.4, thenDragTo: box3.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)))
@@ -48,11 +49,12 @@ final class SlideDragUITests: UITestCase {
         let box1 = application.groups["box-1"].firstMatch
         let box5 = application.groups["box-5"].firstMatch
         let box3 = application.groups["box-3"].firstMatch
-        XCTAssertTrue(box5.waitForExistence(timeout: 30))
+        XCTAssertTrue(box1.waitForExistence(timeout: 30))
         // Select one whole line of slide 1 ("# One" or "First.").
         box1.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).click()
         editor.typeKey(.leftArrow, modifierFlags: .command)
         editor.typeKey(.rightArrow, modifierFlags: [.command, .shift])
+        scrollHeaders(of: box5, and: box3, in: application)
         box5.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
             .click(forDuration: 0.4, thenDragTo: box3.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)))
         let fiveBeforeThree = NSPredicate { _, _ in
@@ -66,5 +68,19 @@ final class SlideDragUITests: UITestCase {
         XCTAssertTrue(text.contains("# One\n\nFirst."), "the selected line survives the move; the editor holds: \(text)")
         let titles = text.components(separatedBy: "\n").filter { $0.hasPrefix("# ") }
         XCTAssertEqual(titles, ["# One", "# Two", "# Five", "# Three", "# Four", "# Six", "# Seven"])
+    }
+
+    /// The editor exposes the boxes it has laid out, so a box below the fold of a
+    /// small window is not there to drag. The wheel scrolls the editor's pane until
+    /// both headers are on screen.
+    private func scrollHeaders(of lower: XCUIElement, and upper: XCUIElement, in application: XCUIApplication) {
+        let pane = application.scrollViews.containing(.textView, identifier: "editor").firstMatch
+        guard pane.waitForExistence(timeout: 30) else { return }
+        for _ in 0..<12 {
+            let visible = pane.frame
+            if lower.exists, upper.exists, lower.frame.minY + 40 < visible.maxY, upper.frame.minY >= visible.minY { return }
+            pane.scroll(byDeltaX: 0, deltaY: -80)
+            _ = lower.waitForExistence(timeout: 1)
+        }
     }
 }
