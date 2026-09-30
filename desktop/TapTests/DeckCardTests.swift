@@ -179,8 +179,8 @@ final class DeckCardTests: HostedTestCase {
         editor.layoutSubtreeIfNeeded()
         let cardFrame = card.cardView.frame
         if card.display == .form {
-            let fitting = EditorTextView.deckCardHeaderHeight + max(card.form.contentHeight, 64)
-            XCTAssertEqual(cardFrame.height, fitting, accuracy: 1, "\(context): the card is as tall as its form fits", file: file, line: line)
+            let fitting = EditorTextView.deckCardHeaderHeight + min(max(card.form.contentHeight, 64), DeckCardController.maximumBodyHeight)
+            XCTAssertEqual(cardFrame.height, fitting, accuracy: 1, "\(context): the card is as tall as its form fits, up to the height at which the form scrolls", file: file, line: line)
         }
         XCTAssertEqual(cardFrame.height, editor.deckCardHeight, accuracy: 0.5, "\(context): the editor reserves the card's height", file: file, line: line)
         let rendered = renderedTextFrames(editor)
@@ -193,7 +193,7 @@ final class DeckCardTests: HostedTestCase {
         let contentManager = try XCTUnwrap(layoutManager.textContentManager, file: file, line: line)
         var checked = 0
         for index in editor.boxes.indices {
-            guard let rect = editor.boxRect(forBoxAt: index), rect.height > 0,
+            guard let rect = editor.boxRect(forBoxAt: index), rect.size.height > 0,
                   let location = contentManager.location(contentManager.documentRange.location, offsetBy: editor.boxes[index].range.location),
                   let fragment = layoutManager.textLayoutFragment(for: location), let firstLine = fragment.textLineFragments.first else { continue }
             let origin = editor.textContainerOrigin
@@ -232,6 +232,7 @@ final class DeckCardTests: HostedTestCase {
         card.refresh()
         try await assertTheTextFollowsTheCard(controller, "schema loaded")
         XCTAssertGreaterThan(card.cardView.frame.height, emptyHeight, "the card grew with the form")
+        XCTAssertEqual(card.cardView.frame.height, EditorTextView.deckCardHeaderHeight + DeckCardController.maximumBodyHeight, accuracy: 0.5, "a form taller than the cap scrolls inside the card")
 
         card.setTextMode(true)
         try await assertTheTextFollowsTheCard(controller, "text mode")

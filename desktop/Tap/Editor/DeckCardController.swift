@@ -137,7 +137,7 @@ final class DeckCardController: NSObject {
             form.refresh()
             form.columnCount = cardView.frame.width >= Self.twoColumnWidth ? 2 : 1
             form.view.layoutSubtreeIfNeeded()
-            bodyHeight = max(form.contentHeight, 64)
+            bodyHeight = min(max(form.contentHeight, 64), Self.maximumBodyHeight)
         }
         cardView.setState(display: shown, bodyHeight: bodyHeight, textIsAvailable: textIsAvailable)
         editor.setDeckCard(display: shown, bodyHeight: bodyHeight, tint: tint, markedLines: markedLines())
@@ -146,6 +146,8 @@ final class DeckCardController: NSObject {
 
     /// The card is wide enough for two columns of fields from this width.
     static let twoColumnWidth: CGFloat = 620
+    /// A form taller than this scrolls inside the card.
+    static let maximumBodyHeight: CGFloat = 420
 
     private var tint: EditorTextView.DeckCardTint {
         if !deckErrors.isEmpty || !errors.isEmpty { return .error }
