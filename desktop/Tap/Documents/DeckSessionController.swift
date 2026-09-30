@@ -503,15 +503,20 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         onThemeChanged?(slug)
     }
 
-    /// A pick in the theme grid: tap theme set on the saved file. "default"
-    /// is the grid's Default cell, which removes the theme line.
+    /// A pick in the theme grid or the Deck card's theme row: the theme line
+    /// of the frontmatter is rewritten through the editor's edit path, one
+    /// undo step, for a deck with a file and one without alike. "default" is
+    /// the grid's Default cell, which removes the theme line.
     func setTheme(_ slug: String) {
-        guard let deck = document?.fileURL else {
-            session.log.append("Change Theme was not run: the deck has no file yet; save it first", source: .app)
+        let frontmatter = Frontmatter(text: editor.string)
+        let value = slug == "default" ? nil : Frontmatter.scalar(forString: slug)
+        guard value != frontmatter.value(at: ["theme"]) else { return }
+        guard let replacement = frontmatter.setting(path: ["theme"], to: value) else {
+            session.log.append("Change Theme did nothing: the frontmatter is not one the app can edit", source: .app)
             NSSound.beep()
             return
         }
-        runToolOnSavedDeck(["theme", "set", slug, deck.path, "--json"], actionName: "Change Theme")
+        editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Change Theme")
     }
 
     /// Slide > Generate Image: tap image generate on the saved file adds

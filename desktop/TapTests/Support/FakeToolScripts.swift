@@ -83,32 +83,6 @@ enum FakeToolScripts {
         """
     }
 
-    /// `tap theme set`: waits `before` seconds, the real tap sets the
-    /// theme, then the script waits `after` seconds before it exits and
-    /// records "finished", so a test can act between the save and tap's
-    /// write, or between the write and the run's end.
-    static func slowThemeSet(before: Double = 0, after: Double, recordingTo record: URL) throws -> URL {
-        let realTap = AppEnvironment.shared.tapExecutableURL.path
-        return try write("""
-          "theme set")
-            sleep \(before)
-            "\(realTap)" "$@"
-            status=$?
-            sleep \(after)
-            echo "finished" >> "\(record.path)"
-            exit $status ;;
-        """, recordingTo: record)
-    }
-
-    /// `tap theme set <slug> <deck>`: fails with tap's unknown_theme error, for the error path.
-    static func themeSetFailing(recordingTo record: URL) throws -> URL {
-        try write("""
-          "theme set")
-            printf '{"ok": false, "error": {"code": "unknown_theme", "message": "unknown theme \\\\"%s\\\\": valid themes are base, terminal"}}\\n' "$3"
-            exit 1 ;;
-        """, recordingTo: record)
-    }
-
     /// `tap export pdf`: `download` lines first when `downloadLines` is set,
     /// a render line per slide with `secondsPerSlide` between them, the
     /// warnings for `broken`, then the done line and the file. It copies
