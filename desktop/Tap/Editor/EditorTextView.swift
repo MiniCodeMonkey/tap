@@ -626,10 +626,11 @@ final class EditorTextView: NSTextView {
     }
 
     /// The rectangle of a box whose start or end is inside the viewport,
-    /// in view coordinates; nil for a box that is entirely off screen. A
+    /// in view coordinates, for drawing and hit testing, which read the
+    /// laid-out viewport only and so stay cheap while typing; nil for a box that is entirely off screen. A
     /// box that starts above the viewport has no trustworthy top, so the
     /// rectangle is extended far above it, as drawing does.
-    func boxRect(forBoxAt index: Int) -> NSRect? {
+    func onScreenBoxRect(forBoxAt index: Int) -> NSRect? {
         guard boxes.indices.contains(index), let layoutManager = textLayoutManager,
               let contentManager = layoutManager.textContentManager,
               let viewport = layoutManager.textViewportLayoutController.viewportRange else { return nil }
@@ -656,11 +657,55 @@ final class EditorTextView: NSTextView {
            let line = fragment.textLineFragments.last {
             bottom = fragment.layoutFragmentFrame.minY + line.typographicBounds.maxY + origin.y + Self.boxPaddingBottom
         }
+        return NSRect(x: left, y: top, width: right - left, height: max(bottom, top) - top)
+    }
+
+    /// The rectangle of a box in view coordinates, from the layout of its
+    /// own text. TextKit lays out only the viewport on its own, so the text
+    /// up to the box's lines is laid out first, from the start of the
+    /// document, which is what gives them a position. A box entirely above or below the
+    /// visible area has its true rectangle; nil only when the text has no
+    /// layout to measure.
+    func boxRect(forBoxAt index: Int) -> NSRect? {
+        guard boxes.indices.contains(index), let layoutManager = textLayoutManager,
+              let contentManager = layoutManager.textContentManager else { return nil }
+        let documentStart = contentManager.documentRange.location
+        let box = boxes[index]
+        let lastOffset = max(box.range.location, box.end - 1)
+        guard let startLocation = contentManager.location(documentStart, offsetBy: box.range.location),
+              let lastLocation = contentManager.location(documentStart, offsetBy: lastOffset) else { return nil }
+        // Layout up to the end of the box's last paragraph, from the start of the document: a range that ends inside a paragraph leaves it where it was estimated.
+        let through = layoutManager.textLayoutFragment(for: lastLocation)?.rangeInElement.endLocation ?? contentManager.documentRange.endLocation
+        if let range = NSTextRange(location: documentStart, end: through) { layoutManager.ensureLayout(for: range) }
+        // One pass over the box's own fragments, each laid out after the one before it, so the top and the bottom come from the same layout.
+        var firstLine: NSTextLineFragment?
+        var lastLine: NSTextLineFragment?
+        var firstTop: CGFloat = 0
+        var lastTop: CGFloat = 0
+        layoutManager.enumerateTextLayoutFragments(from: startLocation, options: [.ensuresLayout]) { fragment in
+            let fragmentTop = fragment.layoutFragmentFrame.minY + self.textContainerOrigin.y
+            if firstLine == nil {
+                firstLine = fragment.textLineFragments.first
+                firstTop = fragmentTop
+            }
+            lastLine = fragment.textLineFragments.last
+            lastTop = fragmentTop
+            return contentManager.offset(from: documentStart, to: fragment.rangeInElement.endLocation) <= lastOffset
+        }
+        guard let firstLine, let lastLine else { return nil }
+        let first = (minY: firstTop + firstLine.typographicBounds.minY, maxY: firstTop + firstLine.typographicBounds.maxY)
+        let last = (minY: lastTop + lastLine.typographicBounds.minY, maxY: lastTop + lastLine.typographicBounds.maxY)
+        let origin = textContainerOrigin
+        let left = origin.x - Self.boxOutset
+        let right = bounds.width - origin.x + Self.boxOutset
+        let errorSpace = CGFloat(Self.errorLineCount(for: box.slide)) * Self.errorLineHeight
+        let top = first.minY - Self.headerHeight - Self.boxPaddingTop - errorSpace
+        let bottom = last.maxY + Self.boxPaddingBottom
         return NSRect(x: left, y: top, width: right - left, height: bottom - top)
     }
 
     func headerRect(forBoxAt index: Int) -> NSRect? {
-        boxRect(forBoxAt: index).map { NSRect(x: $0.minX, y: $0.minY, width: $0.width, height: Self.headerHeight) }
+        onScreenBoxRect(forBoxAt: index).map { NSRect(x: $0.minX, y: $0.minY, width: $0.width, height: Self.headerHeight) }
     }
 
     /// A point on the character itself, in the view's coordinates: a
@@ -710,13 +755,13 @@ final class EditorTextView: NSTextView {
     func dropBoundary(at point: NSPoint) -> Int? {
         guard !boxes.isEmpty else { return nil }
         for index in visibleBoxIndices() {
-            guard let rect = boxRect(forBoxAt: index) else { continue }
+            guard let rect = onScreenBoxRect(forBoxAt: index) else { continue }
             if point.y < rect.minY { return boxes[index].slide.number }
             if point.y <= rect.maxY {
                 return point.y < rect.midY ? boxes[index].slide.number : (index + 1 < boxes.count ? boxes[index + 1].slide.number : nil)
             }
         }
-        if let first = visibleBoxIndices().first, let rect = boxRect(forBoxAt: first), point.y < rect.minY { return boxes[first].slide.number }
+        if let first = visibleBoxIndices().first, let rect = onScreenBoxRect(forBoxAt: first), point.y < rect.minY { return boxes[first].slide.number }
         return nil
     }
 
@@ -746,7 +791,7 @@ final class EditorTextView: NSTextView {
     private func drawBoxes(in rect: NSRect) {
         guard !boxes.isEmpty else { return }
         for index in visibleBoxIndices() {
-            guard let boxRect = boxRect(forBoxAt: index) else { continue }
+            guard let boxRect = onScreenBoxRect(forBoxAt: index) else { continue }
             if boxRect.intersects(rect) {
                 draw(header: header(forBoxAt: index), boxIndex: index, skipped: boxes[index].slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
             }
@@ -1274,7 +1319,7 @@ final class EditorTextView: NSTextView {
         var visibleElements: [Int: NSAccessibilityElement] = [:]
         var visiblePopUps: [Int: LayoutPopUpAccessibilityElement] = [:]
         for index in visibleBoxIndices() {
-            guard let rect = boxRect(forBoxAt: index) else { continue }
+            guard let rect = onScreenBoxRect(forBoxAt: index) else { continue }
             let number = boxes[index].slide.number
             let element = boxAccessibilityElements[number] ?? {
                 let element = NSAccessibilityElement()
