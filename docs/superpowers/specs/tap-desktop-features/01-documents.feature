@@ -129,3 +129,23 @@ Feature: Documents
     When I close the last deck window
     Then the app keeps running and shows the welcome window
 
+  Scenario: Set up recording before the first talk
+    Given recording is not set up and I have not chosen Set Up Later
+    When the welcome window would show at launch
+    Then the window shows the recording setup screen in place of its layouts, over the same aurora, at the same size
+    And the Microphone step has the only button, "Allow Microphone", and the Screen Recording step waits, dimmed
+    When the microphone is off in System Settings
+    Then the button reads "Open Settings" and opens the Microphone pane
+    When I press "Open Settings" for Screen Recording
+    Then the app asks macOS for Screen Recording, opens its pane, and shows "Waiting for System Settings" with a guide to the switch in place of the button
+    And the screen updates by itself as macOS reports each permission
+    When both permissions are on
+    Then the screen says "You're ready to record" and "Continue to Tap" is the main button
+    When I choose "Continue to Tap"
+    Then the window shows its usual content, or closes if a deck is open
+    When I choose "Set Up Later"
+    Then the screen never shows by itself again, and Help > Set Up Recording… shows it at any time
+    When I pressed "Open Settings" for Screen Recording and Tap relaunches with both permissions on
+    Then the screen shows once more with both steps checked
+    When a deck opens at launch
+    Then the welcome window and this screen are skipped

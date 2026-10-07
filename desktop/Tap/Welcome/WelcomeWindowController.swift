@@ -82,6 +82,14 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
                 window.presentError(error, modalFor: window, delegate: nil, didPresent: nil, contextInfo: nil)
             }
         }
+        root.recordingSetup.onSetUpLater = { [weak self] in
+            AppEnvironment.shared.recordingSetupStore.dismissed = true
+            self?.finishRecordingSetup()
+        }
+        root.recordingSetup.onContinue = { [weak self] in
+            AppEnvironment.shared.recordingSetupStore.awaitingConfirmation = false
+            self?.finishRecordingSetup()
+        }
         dropZone.onTargetChange = { [weak self] targeted in self?.root.setDragActive(targeted) }
 
         let center = NotificationCenter.default
@@ -119,6 +127,8 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
             MainActor.assumeIsolated {
                 self?.root.filmstrip.refreshMotionSetting()
                 for brand in [self?.root.emptyStateBrand, self?.root.columnBrand] { brand?.icon.updateBlink() }
+                self?.root.recordingSetup.icon.updateBlink()
+                self?.root.recordingSetup.updateMotion()
             }
         }
         rebuildThemeStrip()
@@ -147,6 +157,25 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
         let visible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false
         root.filmstrip.setActive(showsEmptyState && visible)
         for brand in [root.emptyStateBrand, root.columnBrand] { brand.icon.setBlinking(visible) }
+        root.recordingSetup.icon.setBlinking(visible && root.showsRecordingSetup)
+    }
+
+    /// Shows the window with the recording setup screen in place of its layouts.
+    func showRecordingSetup() {
+        root.recordingSetup.refresh()
+        root.setShowsRecordingSetup(true)
+        showWindow(nil)
+    }
+
+    /// Gives the window its layouts back, or closes it when a deck is open: Set Up Later and Continue to Tap both end here.
+    private func finishRecordingSetup() {
+        root.setShowsRecordingSetup(false)
+        if NSDocumentController.shared.documents.contains(where: { $0 is DeckDocument }) {
+            window?.orderOut(nil)
+        } else {
+            reload()
+        }
+        updateVisibility()
     }
 
     /// The recents list has no change notification, so a visible window
@@ -167,6 +196,7 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     func reload() {
+        if root.showsRecordingSetup { root.recordingSetup.refresh() }
         let urls = NSDocumentController.shared.recentDocumentURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
         if urls != recentURLs {
             recentURLs = urls

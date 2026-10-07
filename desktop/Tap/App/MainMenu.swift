@@ -172,6 +172,8 @@ enum MainMenu {
     static func helpMenu() -> NSMenu {
         let menu = NSMenu(title: "Help")
         menu.addItem(item("Tap Help", action: #selector(AppDelegate.showHelp(_:)), key: "?"))
+        menu.addItem(.separator())
+        menu.addItem(item("Set Up Recording…", action: #selector(AppDelegate.showRecordingSetup(_:))))
         return menu
     }
 }

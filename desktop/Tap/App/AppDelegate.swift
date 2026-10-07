@@ -1,4 +1,5 @@
 import AppKit
+import TapDesktopCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
@@ -37,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             NSDocumentController.shared.openDocument(withContentsOf: URL(fileURLWithPath: path), display: true) { _, _, _ in }
         }
         // Decks opened from Finder at launch arrive first.
-        DispatchQueue.main.async { MainActor.assumeIsolated { self.showWelcomeIfNoDecks() } }
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.showWelcomeIfNoDecks(atLaunch: true) } }
     }
 
     /// There is no untitled document to offer: "New deck" is deliberately
@@ -82,9 +83,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Shows the welcome window, unless a deck is already open. Safe to call
     /// whenever the set of open decks might have changed: at launch, after a
     /// deck window closes, and on a Dock reopen with no visible windows.
-    func showWelcomeIfNoDecks() {
+    /// At launch the recording setup screen takes the window's place until
+    /// recording is set up or put off. Tests start with no permissions, so
+    /// under a test defaults suite it shows only for -TapRecordingSetupOnLaunch YES.
+    func showWelcomeIfNoDecks(atLaunch: Bool = false) {
         guard !NSDocumentController.shared.documents.contains(where: { $0 is DeckDocument }) else { return }
-        WelcomeWindowController.shared.showWindow(nil)
+        let environment = AppEnvironment.shared
+        let setup = RecordingSetup(microphone: environment.recordingPermissions.microphone, screenRecordingAllowed: environment.recordingPermissions.screenRecordingAllowed,
+                                   dismissed: environment.recordingSetupStore.dismissed, awaitingConfirmation: environment.recordingSetupStore.awaitingConfirmation)
+        let testsAllowIt = !UpdateController.runsUnderTests || UserDefaults.standard.bool(forKey: "TapRecordingSetupOnLaunch")
+        if atLaunch, testsAllowIt, setup.showsAtLaunch {
+            WelcomeWindowController.shared.showRecordingSetup()
+        } else {
+            WelcomeWindowController.shared.showWindow(nil)
+        }
+    }
+
+    /// Help > Set Up Recording…: the setup screen, whatever was decided before and whether or not a deck is open.
+    @objc func showRecordingSetup(_ sender: Any?) {
+        WelcomeWindowController.shared.showRecordingSetup()
     }
 
     /// A deck window closing can be the app's last window. `DeckDocument`

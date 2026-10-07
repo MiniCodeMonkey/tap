@@ -84,6 +84,7 @@ D3 | 12-menus-and-shortcuts.feature | Slide menu
 D3 | 12-menus-and-shortcuts.feature | Deck settings from the View menu
 D3 | 12-menus-and-shortcuts.feature | Context menu on a slide
 D3 | 12-menus-and-shortcuts.feature | VoiceOver
+D3 | 01-documents.feature | Set up recording before the first talk
 D3 | 13-performance.feature | The current thumbnail follows the preview
 D3 | 13-performance.feature | Thumbnails
 D3 | 13-performance.feature | Reopen

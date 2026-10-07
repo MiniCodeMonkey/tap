@@ -23,6 +23,7 @@ final class WelcomeRootView: WelcomeContentView {
     let hero = FlippedView()
     let filmstrip = WelcomeFilmstrip()
     let split = FlippedView()
+    let recordingSetup = RecordingSetupView()
     let recentsPane = FlippedView()
     private let hairline = FlippedView()
     let tourLink = WelcomeLinkButton(title: "take the theme tour")
@@ -38,6 +39,7 @@ final class WelcomeRootView: WelcomeContentView {
     private var heroEntranceViews: [(NSView, CFTimeInterval)] = []
     private var columnEntranceViews: [(NSView, CFTimeInterval)] = []
     private(set) var showsEmptyState = false
+    private(set) var showsRecordingSetup = false
     /// Called with the text of a key press that nothing else in the recents layout handled.
     var onTypeToSearch: ((String) -> Void)?
 
@@ -71,7 +73,7 @@ final class WelcomeRootView: WelcomeContentView {
 
         buildHero()
         buildSplit()
-        for view in [aurora, dotGrid, hero, filmstrip, split, dropZone] as [NSView] {
+        for view in [aurora, dotGrid, hero, filmstrip, split, recordingSetup, dropZone] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
             NSLayoutConstraint.activate([
@@ -87,6 +89,7 @@ final class WelcomeRootView: WelcomeContentView {
         }
         aurora.setAccessibilityElement(false)
         setShowsEmptyState(false)
+        setShowsRecordingSetup(false)
         refreshBackground()
     }
 
@@ -233,12 +236,19 @@ final class WelcomeRootView: WelcomeContentView {
     /// Swaps the two layouts. New Deck is the first-launch layout's default button (Return).
     func setShowsEmptyState(_ shows: Bool) {
         showsEmptyState = shows
-        hero.isHidden = !shows
-        filmstrip.isHidden = !shows
-        split.isHidden = shows
+        hero.isHidden = !shows || showsRecordingSetup
+        filmstrip.isHidden = !shows || showsRecordingSetup
+        split.isHidden = shows || showsRecordingSetup
         emptyStateBrand.newDeckButton.keyEquivalent = shows ? "\r" : ""
         columnBrand.newDeckButton.keyEquivalent = ""
-        filmstrip.setActive(shows && window?.isVisible == true)
+        filmstrip.setActive(shows && !showsRecordingSetup && window?.isVisible == true)
+    }
+
+    /// Puts the recording setup screen in place of whichever layout shows, or gives the layout back.
+    func setShowsRecordingSetup(_ shows: Bool) {
+        showsRecordingSetup = shows
+        recordingSetup.isHidden = !shows
+        setShowsEmptyState(showsEmptyState)
     }
 
     // MARK: Colors
@@ -271,7 +281,7 @@ final class WelcomeRootView: WelcomeContentView {
         let reduce = WelcomeMotion.reduceMotion()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = reduce ? 0 : 0.25
-            for view in [hero, filmstrip, split] { view.animator().alphaValue = active ? 0.32 : 1 }
+            for view in [hero, filmstrip, split, recordingSetup] { view.animator().alphaValue = active ? 0.32 : 1 }
         }
         for view in [hero, split] { setSublayerScale(of: view, to: active && !reduce ? 0.985 : 1, animated: !reduce) }
     }

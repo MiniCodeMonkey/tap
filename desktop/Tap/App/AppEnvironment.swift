@@ -70,6 +70,10 @@ final class AppEnvironment {
     lazy var themeImages = ThemeImageLoader()
     /// Whether the Focus hint has been shown on this Mac. A test replaces it.
     var focusHint = FocusHintState()
+    /// The macOS permissions the recording setup screen asks for. A test replaces it with a fake, so no test shows a real prompt.
+    var recordingPermissions: RecordingPermissions = LiveRecordingPermissions()
+    /// Whether the person put the recording setup screen off, and whether Screen Recording awaits its confirming relaunch.
+    var recordingSetupStore = RecordingSetupStore()
     #if DEBUG
     /// Test only, and compiled only into a Debug build: answers a live
     /// code approval before any sheet shows, for a deck a test approved
@@ -165,6 +169,7 @@ final class AppEnvironment {
             deckPorts = DeckPortStore(defaults: defaults)
             presentationSettings = PresentationSettingsStore(defaults: defaults)
             focusHint = FocusHintState(defaults: defaults)
+            recordingSetupStore = RecordingSetupStore(defaults: defaults)
             generalSettings = GeneralSettings(defaults: defaults)
             geminiKeyStore = MemoryGeminiKeyStore()
         }
