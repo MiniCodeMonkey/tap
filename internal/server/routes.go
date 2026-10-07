@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"mime"
 	"net/http"
 	"os"
 	"path"
@@ -384,8 +385,7 @@ func (s *Server) handleLocalFiles(w http.ResponseWriter, r *http.Request) {
 	// Construct the full file path
 	fullPath := path.Join(baseDir, requestedPath)
 
-	// Read the file
-	content, err := os.ReadFile(fullPath)
+	file, err := os.Open(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.NotFound(w, r)
@@ -394,13 +394,19 @@ func (s *Server) handleLocalFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to read file", http.StatusInternalServerError)
 		return
 	}
+	defer file.Close()
 
-	// Set content type based on extension
-	contentType := getContentType(fullPath)
-	w.Header().Set("Content-Type", contentType)
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+
+	// ServeContent answers range requests, which WebKit needs before it plays
+	// a video at all.
+	w.Header().Set("Content-Type", getContentType(fullPath))
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(content)
+	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
 
 // handleComponentBundle serves a component bundle file (JavaScript, CSS, or
@@ -457,6 +463,9 @@ func getContentType(filePath string) string {
 	case ".cast":
 		return "application/json; charset=utf-8"
 	default:
+		if contentType := mime.TypeByExtension(ext); contentType != "" {
+			return contentType
+		}
 		return "application/octet-stream"
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1179,5 +1181,29 @@ func TestPresentationConfigNeverEmbedsTheWholeConfigStruct(t *testing.T) {
 		if !allowed[key] {
 			t.Errorf("config carries unexpected key %q; the config struct may have been embedded wholesale again: %v", key, configFields)
 		}
+	}
+}
+
+func TestHandleLocalFiles_ServesVideoRanges(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "clip.mp4"), []byte("0123456789"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(0)
+	s.SetBaseDir(dir)
+
+	req := httptest.NewRequest(http.MethodGet, "/local/clip.mp4", nil)
+	req.Header.Set("Range", "bytes=2-5")
+	w := httptest.NewRecorder()
+	s.handleLocalFiles(w, req)
+
+	if w.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusPartialContent)
+	}
+	if got := w.Header().Get("Content-Type"); got != "video/mp4" {
+		t.Errorf("Content-Type = %q, want video/mp4", got)
+	}
+	if got := w.Body.String(); got != "2345" {
+		t.Errorf("body = %q, want 2345", got)
 	}
 }
