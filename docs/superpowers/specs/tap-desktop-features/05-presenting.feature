@@ -22,8 +22,8 @@ Feature: Presenting
     When I click the Play button
     Then the talk starts at slide 4 with the settings I last used, and no popover opens
     And holding the Play button or clicking its chevron opens a menu
-    And the menu offers "Play from Slide 4", "Play from Beginning" (with a "Shift click" hint), "Rehearse" and "Present Settings…"
-    And with the cursor in slide 1 the menu says "Play from Slide 1" and has no "Play from Beginning"
+    And the menu offers "Play from Here", "Play from Beginning" (with a "Shift click" hint), "Rehearse" and "Present Settings…"
+    And with the cursor in slide 1 the menu says "Play from Here" and has no "Play from Beginning"
 
   Scenario: Play is dimmed while tap gets ready
     When a deck opens and tap has not started yet

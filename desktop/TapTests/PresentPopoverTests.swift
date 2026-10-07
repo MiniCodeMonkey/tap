@@ -256,7 +256,7 @@ final class PresentPopoverTests: PresentingTestCase {
         controller.jumpToSlide(number: 4)
         deckWindow.presentPopover.passwordSwitch.state = .on
         deckWindow.presentPopover.passwordField.stringValue = "secret"
-        // Present > Play from Slide 4, Cmd+Option+P: no popover, the last settings, the cursor's slide.
+        // Present > Play from Here on slide 4, Cmd+Option+P: no popover, the last settings, the cursor's slide.
         deckWindow.play(nil)
         XCTAssertFalse(deckWindow.presentPopover.isShown)
         XCTAssertEqual(controller.presentation.options,
@@ -439,16 +439,16 @@ final class PresentPopoverTests: PresentingTestCase {
         XCTAssertTrue(identifiers[..<theme].contains(.flexibleSpace), "the deck actions follow a flexible space")
     }
 
-    func testThePlayMenuNamesTheSlide() async throws {
+    func testThePlayMenuOffersTheBeginningAfterSlideOne() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
         var menu = deckWindow.makePlayMenu()
-        XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title), ["Play from Slide 1", "Rehearse", "Present Settings\u{2026}"],
+        XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title), ["Play from Here", "Rehearse", "Present Settings\u{2026}"],
                        "from slide 1 the beginning would be the same play")
         controller.jumpToSlide(number: 3)
         menu = deckWindow.makePlayMenu()
         XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title),
-                       ["Play from Slide 3", "Play from Beginning", "Rehearse", "Present Settings\u{2026}"])
+                       ["Play from Here", "Play from Beginning", "Rehearse", "Present Settings\u{2026}"])
         XCTAssertEqual(menu.items[0].keyEquivalent, "p")
         XCTAssertEqual(menu.items[0].keyEquivalentModifierMask, [.command, .option])
         XCTAssertEqual(menu.items[1].badge?.stringValue, "\u{21E7} click")

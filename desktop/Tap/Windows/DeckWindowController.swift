@@ -596,7 +596,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     // MARK: Presenting
 
-    /// Present > Play from Slide N, Cmd+Option+P: the talk starts at once
+    /// Present > Play from Here, Cmd+Option+P: the talk starts at once
     /// with the last settings (Present Settings' controls), from the
     /// cursor's slide.
     @objc func play(_ sender: Any?) {
@@ -680,7 +680,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let menu = NSMenu(title: "Play")
         menu.autoenablesItems = true
         let cursor = sessionController.currentSlideNumber ?? 1
-        let playItem = NSMenuItem(title: "Play from Slide \(cursor)", action: #selector(play(_:)), keyEquivalent: "p")
+        let playItem = NSMenuItem(title: "Play from Here", action: #selector(play(_:)), keyEquivalent: "p")
         playItem.keyEquivalentModifierMask = [.command, .option]
         menu.addItem(playItem)
         if cursor > 1 {
@@ -1226,7 +1226,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         let presentation = sessionController.presentation
         if menuItem.action == #selector(play(_:)) {
-            menuItem.title = "Play from Slide \(sessionController.currentSlideNumber ?? 1)"
             return canStartATalk
         }
         if menuItem.action == #selector(playFromBeginning(_:)) {
