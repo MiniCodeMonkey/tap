@@ -16,7 +16,7 @@ final class PreviewNavigatorTests: XCTestCase {
     func testFollowingTheCursorShowsEveryStep() {
         var navigator = PreviewNavigator()
         XCTAssertEqual(navigator.cursorMoved(to: fragments), SlideMessage(slideIndex: 2, fragment: 1, step: 0))
-        XCTAssertEqual(navigator.stepLabel, "All steps shown, 2 of 2")
+        XCTAssertEqual(navigator.stepLabel, "Step 3 of 3")
         XCTAssertNil(navigator.cursorMoved(to: fragments), "moving inside the same slide sends nothing")
         XCTAssertEqual(navigator.cursorMoved(to: stepsAndFragments), SlideMessage(slideIndex: 3, fragment: 0, step: 2))
     }
@@ -26,7 +26,7 @@ final class PreviewNavigatorTests: XCTestCase {
         _ = navigator.cursorMoved(to: fragments)
         XCTAssertNil(navigator.stepForward(), "already at the last position")
         XCTAssertEqual(navigator.stepBackward(), SlideMessage(slideIndex: 2, fragment: 0, step: 0))
-        XCTAssertEqual(navigator.stepLabel, "Step 1 of 2")
+        XCTAssertEqual(navigator.stepLabel, "Step 2 of 3")
         XCTAssertEqual(navigator.stepBackward(), SlideMessage(slideIndex: 2, fragment: -1, step: 0))
         XCTAssertNil(navigator.stepBackward())
         XCTAssertEqual(navigator.stepForward(), SlideMessage(slideIndex: 2, fragment: 0, step: 0))

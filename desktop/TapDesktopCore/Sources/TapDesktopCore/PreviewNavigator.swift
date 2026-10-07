@@ -40,10 +40,10 @@ public struct PreviewNavigator: Equatable, Sendable {
         return SlideMessage(slideIndex: slideNumber - 1, fragment: position.fragment, step: position.step)
     }
 
+    /// Counts the slide's states from 1: the first reveals nothing, the last reveals everything.
     public var stepLabel: String {
         if revealCount == 0 { return "" }
-        if positionIndex == revealCount { return "All steps shown, \(revealCount) of \(revealCount)" }
-        return "Step \(positionIndex) of \(revealCount)"
+        return "Step \(positionIndex + 1) of \(revealCount + 1)"
     }
 
     public mutating func cursorMoved(to slide: Slide) -> SlideMessage? {

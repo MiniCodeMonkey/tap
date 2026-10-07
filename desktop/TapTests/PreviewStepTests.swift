@@ -8,7 +8,7 @@ final class PreviewStepTests: HostedTestCase {
         try await waitForBoxes(document, count: 3)
         controller.editor.moveCursor(toSlide: 2)
         try await waitForPreview(document, slide: 3)
-        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "All steps shown, 2 of 2")
+        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "Step 3 of 3")
 
         let observer = HubObserver(ready: try await waitForRunningTap(document))
         defer { observer.close() }
@@ -16,9 +16,9 @@ final class PreviewStepTests: HostedTestCase {
 
         controller.previewViewController.onStepBackward?()
         controller.previewViewController.onStepBackward?()
-        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "Step 0 of 2")
+        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "Step 1 of 3")
         controller.previewViewController.onStepForward?()
-        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "Step 1 of 2")
+        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "Step 2 of 3")
         controller.previewViewController.onStepForward?()
 
         try await waitUntil(timeout: 5, "four slide messages") { observer.slideMessages.count >= 4 }

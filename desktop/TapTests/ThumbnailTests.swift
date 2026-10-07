@@ -103,7 +103,7 @@ final class ThumbnailTests: HostedTestCase {
 
         controller.editor.moveCursor(toSlide: 1)
         try await waitForPreview(document, slide: 2)
-        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "All steps shown, 5 of 5")
+        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "Step 6 of 6")
         let observer = HubObserver(ready: try await waitForRunningTap(document))
         defer { observer.close() }
         try await Task.sleep(nanoseconds: 300_000_000)

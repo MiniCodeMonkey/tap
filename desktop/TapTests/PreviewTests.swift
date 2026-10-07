@@ -10,7 +10,7 @@ final class PreviewTests: HostedTestCase {
         try await waitForPreview(document, slide: 3)
         // Slide 3 has one fragment; the preview shows it revealed.
         XCTAssertEqual(controller.navigator.message, SlideMessage(slideIndex: 2, fragment: 0, step: 0))
-        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "All steps shown, 1 of 1")
+        XCTAssertEqual(controller.previewViewController.stepLabel.stringValue, "Step 2 of 2")
     }
 
     /// tap reloads every page after an approval answer, and a reloaded page
