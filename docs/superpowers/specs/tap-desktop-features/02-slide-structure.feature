@@ -51,14 +51,25 @@ Feature: Slide structure in the editor
     Then the header of box 3 shows "Big Stat" as a tinted chip with a chevron
     And other boxes show their layout name quietly, as a chip while the pointer is over it
     When I click the layout name
-    Then a menu lists tap's layouts with a checkmark on "Big Stat", then "Show All Layouts…"
-    When I choose "Two Columns"
+    Then the layout gallery opens for slide 3, with "Automatic" first and then tap's layouts, and "Big Stat" selected
+    And "Automatic" names the layout tap would pick for the slide
+    When I pick "Two Columns"
     Then only slide 3's directive comment changes to "layout: two-column"
     And it is one undo step named "Change Layout"
-    When I choose "Default"
+    When I pick "Default"
+    Then slide 3's directive comment changes to "layout: default"
+    When I pick "Automatic"
     Then the layout line is removed from slide 3's directive comment
-    When I choose "Show All Layouts…"
-    Then the layout gallery opens for slide 3, and picking a layout changes that slide
+
+  Scenario: Change a component slide's layout from its header
+    Given slide 7 has layout "./components/sources/Groups.jsx"
+    Then the header of box 7 shows "Groups.jsx" as a chip with a chevron
+    When I click the layout name
+    Then the layout gallery shows a "Groups.jsx" cell, selected, above a divider, then "Automatic" and tap's layouts
+    When I pick "Groups.jsx"
+    Then nothing changes
+    When I pick "Default"
+    Then slide 7's directive comment changes to "layout: default"
 
   Scenario: Box badges
     Then a box header shows the step count, for example "2 steps"
