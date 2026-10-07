@@ -56,7 +56,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     let errorTitleLabel = NSTextField(labelWithString: "The deck settings have a problem")
     let errorLabel = NSTextField(wrappingLabelWithString: "")
     let errorHintLabel = NSTextField(labelWithString: "The frontmatter is shown in the editor until it parses.")
-    let scrollView = NSScrollView()
+    let scrollView = PassThroughScrollView()
     /// What the form's shape was last built from (the entries of each map
     /// key, which settings are raw rows, the unknown keys), set once the
     /// rows exist; a difference on refresh rebuilds.
@@ -84,6 +84,15 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
 
     final class FlippedClipView: NSClipView {
         override var isFlipped: Bool { true }
+    }
+
+    /// A scroll view whose content fits hands scroll events on, so the
+    /// editor the card sits in scrolls instead of the gesture stopping here.
+    final class PassThroughScrollView: NSScrollView {
+        override func scrollWheel(with event: NSEvent) {
+            let contentFits = (documentView?.frame.height ?? 0) <= contentView.bounds.height
+            if contentFits { nextResponder?.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
+        }
     }
 
     override func loadView() {
@@ -443,7 +452,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         textView.string = frontmatter.rawBlock(at: path) ?? ""
         textView.delegate = self
         textView.setAccessibilityIdentifier("deck-raw-\(path.joined(separator: "."))")
-        let scroll = NSScrollView()
+        let scroll = PassThroughScrollView()
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder

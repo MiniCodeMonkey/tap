@@ -391,6 +391,23 @@ final class DeckCardTests: HostedTestCase {
         XCTAssertTrue(card.deckErrors.first?.hasPrefix("frontmatter:") == true, "tap's own message")
     }
 
+    func testScrollingOverTheOpenFormScrollsTheEditor() async throws {
+        _ = try await loadedSchema()
+        let (_, controller, _) = try await openOnTheDeckCard()
+        let form = controller.deckCard.form
+        XCTAssertEqual(controller.deckCard.display, .form)
+        controller.editor.layoutSubtreeIfNeeded()
+        let editorScroll = try XCTUnwrap(controller.editor.enclosingScrollView)
+        XCTAssertGreaterThan(controller.editor.frame.height, editorScroll.contentView.bounds.height, "the editor has somewhere to scroll")
+        XCTAssertEqual(editorScroll.contentView.bounds.minY, 0, accuracy: 0.5)
+
+        let cgEvent = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -120, wheel2: 0, wheel3: 0))
+        let event = try XCTUnwrap(NSEvent(cgEvent: cgEvent))
+        form.scrollView.scrollWheel(with: event)
+
+        try await waitUntil(timeout: 5, "the editor scrolls") { editorScroll.contentView.bounds.minY > 0 }
+    }
+
     func testDeckSettingsFromTheViewMenu() async throws {
         _ = try await loadedSchema()
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
