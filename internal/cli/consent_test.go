@@ -122,6 +122,26 @@ func TestConsentNoRecordSkipsThisRunOnly(t *testing.T) {
 	}
 }
 
+// TestConsentRecordOverridesASavedNo is the desktop app's Record switch:
+// a speaker who once answered no at a terminal still records when the app
+// asks for it, and the saved answer stays as it was.
+func TestConsentRecordOverridesASavedNo(t *testing.T) {
+	input, _ := consentFor(t, "n\n")
+	if _, err := presentRecordingWanted(input); err != nil {
+		t.Fatal(err)
+	}
+
+	input.Record = true
+	wanted, err := presentRecordingWanted(input)
+	if err != nil || !wanted {
+		t.Errorf("wanted = %v, %v; want true with --record", wanted, err)
+	}
+	settings, _ := usersettings.Load(input.SettingsPath)
+	if settings.Present.Record == nil || *settings.Present.Record {
+		t.Errorf("--record changed the saved answer")
+	}
+}
+
 // TestConsentIgnoresAMalformedSettingsFileAndAsksAgain covers ruling 6: a
 // malformed settings.yaml must not stop the talk. Consent is treated as
 // unanswered, so an interactive run asks again and saves the speaker's

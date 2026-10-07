@@ -14,6 +14,7 @@ import (
 var (
 	presentPort              int
 	presentNoRecord          bool
+	presentRecord            bool
 	presentLAN               bool
 	presentAllowCode         bool
 	presentApp               bool
@@ -35,6 +36,7 @@ Examples:
   tap present                  # The deck in this folder
   tap present slides.md
   tap present slides.md --no-record   # skip recording for this run
+  tap present slides.md --record      # record this run, whatever you answered before
   tap present slides.md --presenter-password secret   # Protect the presenter view, then press u for a phone remote`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -58,6 +60,7 @@ Examples:
 				present:           true,
 				app:               true,
 				noRecord:          presentNoRecord,
+				forceRecord:       presentRecord,
 			})
 		}
 
@@ -75,6 +78,7 @@ Examples:
 			In:           os.Stdin,
 			Out:          os.Stdout,
 			NoRecord:     presentNoRecord,
+			Record:       presentRecord,
 			Supported:    recorder.Supported(),
 			Interactive:  isatty.IsTerminal(os.Stdin.Fd()),
 		})
@@ -100,6 +104,8 @@ func init() {
 
 	presentCmd.Flags().IntVarP(&presentPort, "port", "p", 3000, "port for the server")
 	presentCmd.Flags().BoolVar(&presentNoRecord, "no-record", false, "do not record this run")
+	presentCmd.Flags().BoolVar(&presentRecord, "record", false, "record this run from launch, whatever settings.yaml says, and save no answer")
+	presentCmd.MarkFlagsMutuallyExclusive("record", "no-record")
 	presentCmd.Flags().BoolVar(&presentLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
 	presentCmd.Flags().BoolVar(&presentAllowCode, "allow-code", false, "let the deck's live code run for this run without an approval, and save none")
 	presentCmd.Flags().BoolVar(&presentApp, "app", false, "run as the engine of the Tap desktop app: JSON events on standard output, commands on standard input (an interface for the app, not for people)")

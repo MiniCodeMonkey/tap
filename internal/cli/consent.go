@@ -15,8 +15,11 @@ type consentInput struct {
 	In           io.Reader
 	Out          io.Writer
 	// Asker asks the question. Nil asks on In and Out, at the terminal.
-	Asker       consentAsker
-	NoRecord    bool
+	Asker    consentAsker
+	NoRecord bool
+	// Record is --record: this run records, and the saved answer is
+	// neither read nor written.
+	Record      bool
 	Supported   bool
 	Interactive bool
 }
@@ -57,6 +60,9 @@ func (asker terminalConsentAsker) askRecordConsent() (record, answered bool) {
 func presentRecordingWanted(input consentInput) (bool, error) {
 	if !input.Supported || input.NoRecord {
 		return false, nil
+	}
+	if input.Record {
+		return true, nil
 	}
 
 	settings, err := usersettings.Load(input.SettingsPath)

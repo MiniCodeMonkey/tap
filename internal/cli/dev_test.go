@@ -60,9 +60,9 @@ func TestRecordingAudioOptions(t *testing.T) {
 // TestPresentLaunchPreflightCreatesTheOutputDirOnlyWhenRecordingAtLaunch
 // covers ruling 5: recording from launch needs the full Preflight (the
 // same one the dev controller runs before c), which creates the output
-// directory Begin(startNow: true) needs right away; waiting for c keeps
-// the lighter StartupPreflight, which must not create that directory on
-// every tap present.
+// directory Begin(startNow: true) needs right away; a talk that waits for c
+// runs no check at all, so it never creates that directory and never takes
+// the still that makes macOS ask the speaker to confirm a capture.
 func TestPresentLaunchPreflightCreatesTheOutputDirOnlyWhenRecordingAtLaunch(t *testing.T) {
 	if !recorder.Supported() {
 		t.Skip("the full preflight runs on macOS only")
@@ -71,7 +71,7 @@ func TestPresentLaunchPreflightCreatesTheOutputDirOnlyWhenRecordingAtLaunch(t *t
 	waitController := newRecordController(recordControllerOptions{DeckTitle: "My Talk", OutputDir: waitOutputDir})
 	presentLaunchPreflight(waitController, false)
 	if _, err := os.Stat(waitOutputDir); !os.IsNotExist(err) {
-		t.Errorf("StartupPreflight (not recording at launch) created %s", waitOutputDir)
+		t.Errorf("a launch that does not record created %s", waitOutputDir)
 	}
 
 	recordOutputDir := filepath.Join(t.TempDir(), "recordings")

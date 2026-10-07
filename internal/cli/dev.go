@@ -116,9 +116,11 @@ type serverOptions struct {
 	// and no browser, a loopback server on a free port behind a token,
 	// JSON events on standard output and commands on standard input.
 	app bool
-	// noRecord is tap present --no-record. Only --app reads it: without
-	// --app, tap present settles recording before runDevServer.
-	noRecord bool
+	// noRecord is tap present --no-record, and forceRecord is --record.
+	// Only --app reads them: without --app, tap present settles recording
+	// before runDevServer.
+	noRecord    bool
+	forceRecord bool
 }
 
 func init() {
@@ -842,6 +844,7 @@ func runDevServer(options serverOptions) (err error) {
 					SettingsPath: settingsPath,
 					Out:          appLog,
 					NoRecord:     options.noRecord,
+					Record:       options.forceRecord,
 					Supported:    recorder.Supported(),
 					Interactive:  true,
 					Asker:        appConsentAsker{ctx: ctx, questions: questions, settingsPath: settingsPath},
@@ -1171,16 +1174,17 @@ func runDevServer(options serverOptions) (err error) {
 }
 
 // presentLaunchPreflight picks the preflight a tap present launch runs.
-// Recording from launch (startNow) needs the full Preflight, the same one
-// the dev controller runs before c: it also creates the output directory,
-// which Begin(startNow: true) needs right away instead of on demand.
-// Waiting to record keeps the lighter StartupPreflight, which does not
-// create that directory.
+// Recording from launch runs the full Preflight, the same one the dev
+// controller runs before c: it also creates the output directory, which
+// Begin(startNow: true) needs right away. A talk that does not record from
+// launch checks nothing: the Screen Recording check takes a still, and on
+// macOS any capture outside the system picker asks the speaker to confirm,
+// so a probe at every talk start would ask at every talk start.
 func presentLaunchPreflight(recordings *recordController, startNow bool) recorder.Report {
 	if startNow {
 		return recordings.Preflight()
 	}
-	return recordings.StartupPreflight()
+	return recorder.Report{}
 }
 
 // loadAppConfig loads path's config the way config.Load does, except that
