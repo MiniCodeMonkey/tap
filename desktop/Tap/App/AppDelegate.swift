@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard !NSDocumentController.shared.documents.contains(where: { $0 is DeckDocument }) else { return }
         let environment = AppEnvironment.shared
         let setup = RecordingSetup(microphone: environment.recordingPermissions.microphone, screenRecordingAllowed: environment.recordingPermissions.screenRecordingAllowed,
-                                   dismissed: environment.recordingSetupStore.dismissed, awaitingConfirmation: environment.recordingSetupStore.awaitingConfirmation)
+                                   dismissed: environment.recordingSetupStore.dismissed)
         let testsAllowIt = !UpdateController.runsUnderTests || UserDefaults.standard.bool(forKey: "TapRecordingSetupOnLaunch")
         if atLaunch, testsAllowIt, setup.showsAtLaunch {
             WelcomeWindowController.shared.showRecordingSetup()

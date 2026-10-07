@@ -24,24 +24,19 @@ public enum RecordingStepAction: Equatable, Sendable {
 /// The recording setup screen's whole decision: which step is current, what
 /// each step's button is, and whether the screen opens by itself at launch.
 /// Recording needs the microphone and Screen Recording, in that order.
-/// `awaitingConfirmation` is set once the person pressed Open Settings for
-/// Screen Recording, and holds until they continue: macOS reports that
-/// permission only after Tap relaunches, so the screen shows once more then.
-/// `screenRecordingSettingsOpened` is the same press in this launch only: it
-/// alone turns the button into the waiting status, so a relaunch without the
-/// permission brings the button back.
+/// `screenRecordingSettingsOpened` is a press of Open Settings for Screen
+/// Recording in this launch: it turns the button into the waiting status,
+/// and a relaunch without the permission brings the button back.
 public struct RecordingSetup: Equatable, Sendable {
     public var microphone: MicrophoneAccess
     public var screenRecordingAllowed: Bool
     public var dismissed: Bool
-    public var awaitingConfirmation: Bool
     public var screenRecordingSettingsOpened: Bool
 
-    public init(microphone: MicrophoneAccess, screenRecordingAllowed: Bool, dismissed: Bool, awaitingConfirmation: Bool, screenRecordingSettingsOpened: Bool = false) {
+    public init(microphone: MicrophoneAccess, screenRecordingAllowed: Bool, dismissed: Bool, screenRecordingSettingsOpened: Bool = false) {
         self.microphone = microphone
         self.screenRecordingAllowed = screenRecordingAllowed
         self.dismissed = dismissed
-        self.awaitingConfirmation = awaitingConfirmation
         self.screenRecordingSettingsOpened = screenRecordingSettingsOpened
     }
 
@@ -68,18 +63,17 @@ public struct RecordingSetup: Equatable, Sendable {
         }
     }
 
-    /// Whether the screen replaces the Welcome window at launch: until it is
-    /// set up or put off, and once more after the relaunch that confirms it.
+    /// Whether the screen replaces the Welcome window at launch: only while
+    /// a permission is missing and the person has not put it off.
     public var showsAtLaunch: Bool {
-        isComplete ? awaitingConfirmation : !dismissed
+        !isComplete && !dismissed
     }
 }
 
-/// The two facts about the setup screen that outlive a launch.
+/// The one fact about the setup screen that outlives a launch.
 public struct RecordingSetupStore: @unchecked Sendable {
     private let defaults: UserDefaults
     static let dismissedKey = "RecordingSetupDismissed"
-    static let awaitingConfirmationKey = "RecordingSetupAwaitingConfirmation"
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -91,9 +85,4 @@ public struct RecordingSetupStore: @unchecked Sendable {
         nonmutating set { defaults.set(newValue, forKey: Self.dismissedKey) }
     }
 
-    /// The person pressed Open Settings for Screen Recording and has not continued since.
-    public var awaitingConfirmation: Bool {
-        get { defaults.bool(forKey: Self.awaitingConfirmationKey) }
-        nonmutating set { defaults.set(newValue, forKey: Self.awaitingConfirmationKey) }
-    }
 }

@@ -145,7 +145,7 @@ Feature: Documents
     Then the window shows its usual content, or closes if a deck is open
     When I choose "Set Up Later"
     Then the screen never shows by itself again, and Help > Set Up Recording… shows it at any time
-    When I pressed "Open Settings" for Screen Recording and Tap relaunches with both permissions on
-    Then the screen shows once more with both steps checked
+    When Tap launches with both permissions on
+    Then the welcome window shows its usual content, and only Help > Set Up Recording… shows the screen
     When a deck opens at launch
     Then the welcome window and this screen are skipped

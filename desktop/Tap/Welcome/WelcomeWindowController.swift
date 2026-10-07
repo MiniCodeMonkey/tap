@@ -86,10 +86,7 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
             AppEnvironment.shared.recordingSetupStore.dismissed = true
             self?.finishRecordingSetup()
         }
-        root.recordingSetup.onContinue = { [weak self] in
-            AppEnvironment.shared.recordingSetupStore.awaitingConfirmation = false
-            self?.finishRecordingSetup()
-        }
+        root.recordingSetup.onContinue = { [weak self] in self?.finishRecordingSetup() }
         dropZone.onTargetChange = { [weak self] targeted in self?.root.setDragActive(targeted) }
 
         let center = NotificationCenter.default

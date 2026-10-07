@@ -193,7 +193,7 @@ final class RecordingStepCard: FlippedView {
     init(step: RecordingStep) {
         self.step = step
         nameLabel = setupLabel(step == .microphone ? "Microphone" : "Screen Recording", size: 15, weight: .semibold, color: WelcomeColor.ink)
-        reasonLabel = setupLabel("", size: 12.5, weight: .regular, color: WelcomeColor.text3, wrapWidth: 180)
+        reasonLabel = setupLabel("", size: 12.5, weight: .regular, color: WelcomeColor.text3, wrapWidth: 220)
         statusStack = NSStackView(views: [spinner, statusLabel])
         super.init(frame: .zero)
         wantsLayer = true
@@ -241,7 +241,10 @@ final class RecordingStepCard: FlippedView {
         text.spacing = 2
         text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         text.setHuggingPriority(.defaultLow, for: .horizontal)
-        let top = NSStackView(views: [tile, text, button, statusStack])
+        // The spacer takes the slack, so the button and the status sit at the card's trailing edge.
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let top = NSStackView(views: [tile, text, spacer, button, statusStack])
         top.orientation = .horizontal
         top.alignment = .centerY
         top.spacing = 14
@@ -377,7 +380,7 @@ final class RecordingSetupView: FlippedView {
     private let footer = FlippedView()
     private let footerLine = FlippedView()
     private let segments = [FlippedView(), FlippedView()]
-    private(set) var state = RecordingSetup(microphone: .notDetermined, screenRecordingAllowed: false, dismissed: false, awaitingConfirmation: false)
+    private(set) var state = RecordingSetup(microphone: .notDetermined, screenRecordingAllowed: false, dismissed: false)
     var onSetUpLater: (() -> Void)?
     var onContinue: (() -> Void)?
 
@@ -465,7 +468,7 @@ final class RecordingSetupView: FlippedView {
         let permissions = AppEnvironment.shared.recordingPermissions
         let store = AppEnvironment.shared.recordingSetupStore
         show(RecordingSetup(microphone: permissions.microphone, screenRecordingAllowed: permissions.screenRecordingAllowed,
-                            dismissed: store.dismissed, awaitingConfirmation: store.awaitingConfirmation, screenRecordingSettingsOpened: openedScreenRecordingSettings))
+                            dismissed: store.dismissed, screenRecordingSettingsOpened: openedScreenRecordingSettings))
     }
 
     private func show(_ setup: RecordingSetup) {
@@ -496,7 +499,6 @@ final class RecordingSetupView: FlippedView {
         case (.microphone, .allow): permissions.requestMicrophone()
         case (.microphone, .openSettings): permissions.openMicrophoneSettings()
         case (.screenRecording, .openSettings):
-            AppEnvironment.shared.recordingSetupStore.awaitingConfirmation = true
             openedScreenRecordingSettings = true
             permissions.requestScreenRecordingAndOpenSettings()
         default: break

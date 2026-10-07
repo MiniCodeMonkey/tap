@@ -78,7 +78,6 @@ final class RecordingSetupTests: HostedTestCase {
         XCTAssertEqual(setup.screenCard.button.title, "Open Settings")
         setup.screenCard.button.performClick(nil)
         XCTAssertEqual(permissions.screenRequests, 1)
-        XCTAssertTrue(AppEnvironment.shared.recordingSetupStore.awaitingConfirmation)
         XCTAssertTrue(setup.screenCard.button.isHidden)
         XCTAssertEqual(setup.continueButton.style, .quiet)
 
@@ -89,7 +88,6 @@ final class RecordingSetupTests: HostedTestCase {
         XCTAssertEqual(setup.continueButton.style, .primary)
         XCTAssertTrue(setup.laterButton.superview?.isHidden ?? false, "Set Up Later is gone")
         setup.continueButton.performClick(nil)
-        XCTAssertFalse(AppEnvironment.shared.recordingSetupStore.awaitingConfirmation)
         XCTAssertFalse(welcome.root.showsRecordingSetup)
         XCTAssertTrue(setup.isHidden)
     }

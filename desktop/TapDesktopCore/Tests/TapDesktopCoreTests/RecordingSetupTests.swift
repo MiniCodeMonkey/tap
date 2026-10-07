@@ -2,8 +2,8 @@ import XCTest
 @testable import TapDesktopCore
 
 final class RecordingSetupTests: XCTestCase {
-    private func setup(_ microphone: MicrophoneAccess = .notDetermined, screen: Bool = false, dismissed: Bool = false, awaiting: Bool = false) -> RecordingSetup {
-        RecordingSetup(microphone: microphone, screenRecordingAllowed: screen, dismissed: dismissed, awaitingConfirmation: awaiting)
+    private func setup(_ microphone: MicrophoneAccess = .notDetermined, screen: Bool = false, dismissed: Bool = false) -> RecordingSetup {
+        RecordingSetup(microphone: microphone, screenRecordingAllowed: screen, dismissed: dismissed)
     }
 
     func testTheMicrophoneComesFirst() {
@@ -20,8 +20,8 @@ final class RecordingSetupTests: XCTestCase {
         XCTAssertEqual(ready.currentStep, .screenRecording)
         XCTAssertEqual(ready.action(for: .microphone), .none)
         XCTAssertEqual(ready.action(for: .screenRecording), .openSettings)
-        var opened = setup(.allowed, awaiting: true)
-        XCTAssertEqual(opened.action(for: .screenRecording), .openSettings, "after a relaunch without the permission, the button is back")
+        var opened = setup(.allowed)
+        XCTAssertEqual(opened.action(for: .screenRecording), .openSettings, "a fresh launch offers the button")
         opened.screenRecordingSettingsOpened = true
         XCTAssertEqual(opened.action(for: .screenRecording), .waiting)
         XCTAssertTrue(ready.isDone(.microphone))
@@ -37,23 +37,16 @@ final class RecordingSetupTests: XCTestCase {
 
     func testShowsAtLaunchUntilSetUpOrPutOff() {
         XCTAssertTrue(setup().showsAtLaunch)
-        XCTAssertTrue(setup(.allowed, awaiting: true).showsAtLaunch)
+        XCTAssertTrue(setup(.allowed).showsAtLaunch, "one permission is still missing")
         XCTAssertFalse(setup(dismissed: true).showsAtLaunch)
-        XCTAssertFalse(setup(.allowed, screen: true).showsAtLaunch, "once confirmed, never again")
+        XCTAssertFalse(setup(.allowed, screen: true).showsAtLaunch, "with both allowed it never opens by itself")
     }
 
-    func testShowsOnceMoreAfterTheRelaunchThatConfirmsIt() {
-        XCTAssertTrue(setup(.allowed, screen: true, dismissed: true, awaiting: true).showsAtLaunch)
-    }
-
-    func testStoreKeepsBothFacts() throws {
+    func testStoreKeepsTheDismissal() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "RecordingSetupTests.\(UUID().uuidString)"))
         let store = RecordingSetupStore(defaults: defaults)
         XCTAssertFalse(store.dismissed)
-        XCTAssertFalse(store.awaitingConfirmation)
         store.dismissed = true
-        store.awaitingConfirmation = true
         XCTAssertTrue(RecordingSetupStore(defaults: defaults).dismissed)
-        XCTAssertTrue(RecordingSetupStore(defaults: defaults).awaitingConfirmation)
     }
 }
