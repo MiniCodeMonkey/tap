@@ -38,7 +38,7 @@ func (e *Exporter) reportRender(done, total int) {
 // the rest of its text is dropped, so stdout keeps only the command's
 // result and stderr only progress lines.
 func (e *Exporter) installOptions() *playwright.RunOptions {
-	options := &playwright.RunOptions{Browsers: []string{"chromium"}}
+	options := &playwright.RunOptions{Browsers: []string{e.browserName()}}
 	if e.progress != nil {
 		options.Stdout = &installProgressWriter{progress: e.progress}
 		options.Stderr = io.Discard

@@ -382,6 +382,7 @@ tap export pdf [deck]
 |------|-------|-------------|
 | `--output <file>` | `-o` | Output PDF file path (default: `<deck>.pdf`) |
 | `--content <type>` | | Content to include: `slides`, `notes`, or `both` (default: `slides`) |
+| `--browser <engine>` | | Browser engine to render in: `chromium` (default) or `webkit`, Safari's engine, which Tap Desktop presents in. `webkit` renders `slides` only; the notes formats are printed by Chromium |
 | `--json` | | Print the result as JSON |
 | `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
@@ -459,7 +460,7 @@ PDF export captures your presentation at export time. If you have live code exec
 
 ## tap export images
 
-Render one slide, or every slide, to a PNG. Tap starts a temporary server and drives the same headless Chromium `tap export pdf` uses. It is built for checking a slide you just wrote, by hand or from a script.
+Render one slide, or every slide, to a PNG. Tap starts a temporary server and drives the same headless browser `tap export pdf` uses, Chromium unless `--browser webkit` asks for Safari's engine. It is built for checking a slide you just wrote, by hand or from a script.
 
 ### Usage
 
@@ -479,6 +480,7 @@ tap export images [deck] [flags]
 | `--output <path>` | `-o` | Output PNG file, or output folder with `--all`. Default derived from the deck's file name |
 | `--wait <ms>` | | Keep the capture live and wait this long after the page is ready, instead of settling it (`0` to `60000`) |
 | `--width <px>` | | Viewport width in pixels; height follows the deck's aspect ratio (default `1920`) |
+| `--browser <engine>` | | Browser engine to render in: `chromium` (default) or `webkit`, Safari's engine, which Tap Desktop presents in |
 | `--json` | | Print the written files as JSON |
 | `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
@@ -489,6 +491,8 @@ With neither `--step` nor `--fragment`, the slide renders its final state throug
 With either flag, the slide renders that exact presenter state, **settled**: the requested step or fragment, with every component and theme animation given its finished appearance rather than caught partway through. The step is not moved to the deck's final value the way true print mode moves it.
 
 `--wait <ms>` skips the settling and keeps the capture live, then waits that many milliseconds before taking the shot. The clock starts once the page is **ready**, not at navigation: network idle, fonts loaded, and any animation already running finished. A short mount animation is therefore already over when the wait begins, so `--wait` suits an animation that starts on a timer, or one that runs longer than those readiness waits.
+
+`--browser webkit` renders in Playwright's WebKit instead of Chromium. Tap Desktop presents, previews and thumbnails a deck in a macOS web view, which is WebKit, so a check made with this flag shows what the app will show. The two engines differ in which web APIs they have: a component that feature-detects a Chromium-only API and quietly does nothing without it renders in Chromium and comes out blank in the app. The first run downloads the WebKit build, the same way the first Chromium run does.
 
 On success the command prints the path of each file written, one per line, and nothing else.
 
@@ -524,6 +528,9 @@ tap export images deck.md --all --output shots/
 
 # Render with a specific theme
 tap export images deck.md --slide 3 --theme bauhaus
+
+# Render in WebKit, the engine Tap Desktop presents in
+tap export images deck.md --slide 3 --browser webkit --output webkit.png
 
 # Use the exit status as a self-check
 tap export images deck.md --slide 2 --output check.png || echo "slide 2 is broken"

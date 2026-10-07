@@ -33,6 +33,7 @@ var (
 	screenshotWait     int
 	screenshotJSON     bool
 	screenshotProgress string
+	screenshotBrowser  string
 )
 
 // exportImagesCmd represents the export images command
@@ -87,6 +88,7 @@ func init() {
 	exportImagesCmd.Flags().IntVar(&screenshotWait, "wait", 0, "milliseconds to wait after the page is ready before capturing, instead of settling (0-60000)")
 	exportImagesCmd.Flags().BoolVar(&screenshotJSON, "json", false, "print the written files as JSON")
 	exportImagesCmd.Flags().StringVar(&screenshotProgress, "progress", "", "print progress to stderr as JSON lines (json)")
+	exportImagesCmd.Flags().StringVar(&screenshotBrowser, "browser", "chromium", "browser engine to render in: chromium, or webkit (Safari's engine, which Tap Desktop presents in)")
 }
 
 // runExportImages implements the export images command. It returns an
@@ -125,6 +127,11 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 
 	if err := validateWaitFlag(screenshotWait); err != nil {
 		return err
+	}
+
+	browser, err := pdf.ValidateBrowser(screenshotBrowser)
+	if err != nil {
+		return userError(codeUsage, err)
 	}
 
 	if screenshotTheme != "" && !themes.IsValid(screenshotTheme) {
@@ -202,6 +209,7 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return internalError(codeBrowser, fmt.Errorf("failed to create browser exporter: %w", err))
 	}
+	exporter.SetBrowser(browser)
 	if progress.enabled() {
 		exporter.SetProgress(progress)
 	}

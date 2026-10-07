@@ -485,6 +485,20 @@ the page is **ready** (network idle, fonts, running animations finished),
 not after navigation. A short mount animation is over before the wait
 starts, so `--wait` suits timer-driven or long animations.
 
+**Two engines.** `tap export` renders in Chromium by default. Tap Desktop
+presents, previews and thumbnails the deck in WebKit, Safari's engine, and
+the two differ in which web APIs exist (WebKit has no WebCodecs
+`ImageDecoder`, for one). A component that feature-detects an API and
+quietly skips the work without it passes every Chromium check and comes
+out blank in the app, with no error card. So: a missing API gets a
+simpler fallback, never a skip, and a deck headed for the desktop app
+gets one check with `--browser webkit`. The first run downloads the WebKit
+build.
+
+```bash
+tap export images deck.md --slide 2 --browser webkit --output webkit.png
+```
+
 **The exit status is the check.** `tap export images` exits 1, with a message
 on standard error, when the deck is missing, a slide, step, or fragment is
 out of range, the theme is unknown, a component fails to build, the

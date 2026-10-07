@@ -44,7 +44,10 @@ with no wizard.
 
 Check your own work by rendering it: `tap export images` exits with status 1
 when a slide shows an error card, and `tap build` exits 1 on any component
-build error. Neither needs a browser window.
+build error. Neither needs a browser window. Renders use Chromium unless
+you pass `--browser webkit`; Tap Desktop presents in WebKit, so a deck
+headed for the app gets one check there, and a component that
+feature-detects a web API needs a fallback, not a silent skip.
 
 ## Basic Slide Structure
 

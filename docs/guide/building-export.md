@@ -236,6 +236,11 @@ tap export images slides.md --all --output shots/
 It exits with status 1 when the slide shows an error card, so it works as
 a check in a script. The capture waits for the same ready signal as a PDF export. See [CLI Commands](/reference/cli-commands#tap-export-images).
 
+Both commands render in Chromium unless you pass `--browser webkit`. Tap
+Desktop presents in WebKit, Safari's engine, so a deck headed for the app
+is worth one check in that engine; see [Two browser
+engines](/guide/custom-components#two-browser-engines).
+
 ::: tip
 PDF export captures your presentation at a specific moment. If you have live code execution enabled, the results shown in the PDF will be whatever was displayed at export time.
 :::

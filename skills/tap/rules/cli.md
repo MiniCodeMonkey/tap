@@ -152,6 +152,7 @@ tap export pdf [deck]
 |------|-------|-------------|
 | `--output <file>` | `-o` | Output PDF file path (default: `<deck>.pdf`) |
 | `--content <type>` | | Content to include: `slides`, `notes`, or `both` |
+| `--browser <engine>` | | `chromium` (default) or `webkit`, the engine Tap Desktop presents in. `webkit` renders `slides` only |
 | `--json` | | Print the result as JSON |
 | `--progress json` | | progress as JSON lines on stderr |
 
@@ -185,6 +186,7 @@ tap export images [deck] [flags]
 | `--theme <slug>` | `-t` | Render with this theme instead of the deck's own |
 | `--output <path>` | `-o` | Output PNG file, or folder with `--all` |
 | `--width <px>` | | Viewport width (default `1920`); height follows the aspect ratio |
+| `--browser <engine>` | | `chromium` (default) or `webkit`, Safari's engine, which Tap Desktop presents in |
 | `--json` | | Print the written files as JSON |
 | `--progress json` | | progress as JSON lines on stderr |
 
@@ -197,6 +199,7 @@ tap export images deck.md --slide 12
 tap export images deck.md --slide 12 --step 3
 tap export images deck.md --all --output shots/
 tap export images deck.md --slide 2 --output check.png || echo "slide 2 is broken"
+tap export images deck.md --slide 2 --browser webkit --output webkit.png   # what Tap Desktop shows
 ```
 
 `--json`:

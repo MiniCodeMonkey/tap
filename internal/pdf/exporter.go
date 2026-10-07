@@ -11,10 +11,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/mxschmitt/playwright-go"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
-	"github.com/mxschmitt/playwright-go"
 )
 
 // ContentType specifies what content to include in the exported PDF.
@@ -77,10 +77,36 @@ type BrokenSlide struct {
 	Message     string
 }
 
+// Browser names the engine an export renders in.
+type Browser string
+
+const (
+	// BrowserChromium is the default engine, the one `tap dev` opens in Chrome.
+	BrowserChromium Browser = "chromium"
+	// BrowserWebKit is Safari's engine, the one Tap Desktop presents and
+	// thumbnails in. It renders slides and images, not the notes PDF formats:
+	// Playwright prints a page to PDF only from Chromium.
+	BrowserWebKit Browser = "webkit"
+)
+
+// ValidateBrowser parses a --browser flag value. Empty means Chromium.
+func ValidateBrowser(name string) (Browser, error) {
+	switch name {
+	case "chromium", "":
+		return BrowserChromium, nil
+	case "webkit":
+		return BrowserWebKit, nil
+	default:
+		return "", fmt.Errorf("invalid browser %q: must be 'chromium' or 'webkit'", name)
+	}
+}
+
 // Exporter handles PDF generation from tap presentations.
 type Exporter struct {
 	pw      *playwright.Playwright
 	browser playwright.Browser
+	// engine is the browser launchBrowser starts; empty means Chromium.
+	engine Browser
 	// progress receives download and render progress; nil reports nothing.
 	progress Progress
 }
@@ -89,6 +115,20 @@ type Exporter struct {
 // Call Close() when done to clean up browser resources.
 func New() (*Exporter, error) {
 	return &Exporter{}, nil
+}
+
+// SetBrowser picks the engine to render in. Call it before the first
+// render; it has no effect once the browser is running.
+func (e *Exporter) SetBrowser(browser Browser) {
+	e.engine = browser
+}
+
+// browserName is the Playwright name of the engine to install and launch.
+func (e *Exporter) browserName() string {
+	if e.engine == BrowserWebKit {
+		return string(BrowserWebKit)
+	}
+	return string(BrowserChromium)
 }
 
 // launchBrowser lazily launches the browser when needed.
@@ -109,12 +149,16 @@ func (e *Exporter) launchBrowser() error {
 	}
 	e.pw = pw
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+	browserType := pw.Chromium
+	if e.engine == BrowserWebKit {
+		browserType = pw.WebKit
+	}
+	browser, err := browserType.Launch(playwright.BrowserTypeLaunchOptions{
 		Headless: playwright.Bool(true),
 	})
 	if err != nil {
 		_ = e.pw.Stop()
-		return fmt.Errorf("failed to launch chromium: %w", err)
+		return fmt.Errorf("failed to launch %s: %w", e.browserName(), err)
 	}
 	e.browser = browser
 

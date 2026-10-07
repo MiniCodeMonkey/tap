@@ -16,6 +16,19 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
+func TestValidateBrowser(t *testing.T) {
+	for input, want := range map[string]Browser{"": BrowserChromium, "chromium": BrowserChromium, "webkit": BrowserWebKit} {
+		if got, err := ValidateBrowser(input); err != nil || got != want {
+			t.Errorf("ValidateBrowser(%q) = %v, %v; want %v", input, got, err, want)
+		}
+	}
+	for _, input := range []string{"safari", "WebKit", "firefox"} {
+		if _, err := ValidateBrowser(input); err == nil {
+			t.Errorf("ValidateBrowser(%q) accepted", input)
+		}
+	}
+}
+
 func TestValidateContentType(t *testing.T) {
 	tests := []struct {
 		input   string

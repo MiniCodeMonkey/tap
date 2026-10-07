@@ -864,6 +864,32 @@ tap export images deck.md --slide 3 --step 2              # step 2, settled
 tap export images deck.md --slide 3 --step 2 --wait 400   # 400ms past readiness
 ```
 
+## Two browser engines
+
+A deck meets two browser engines. `tap dev` opens in whatever browser you
+use, and `tap export` renders in headless Chromium. Tap Desktop presents,
+previews and thumbnails the deck in a macOS web view, which is WebKit, the
+engine of Safari. Most of a deck renders the same in both. A custom
+component that reaches for a web API is where they part ways: Chromium
+ships APIs that WebKit does not, such as WebCodecs' `ImageDecoder`, and
+WebKit plays media formats Chromium does not.
+
+The dangerous shape is a component that feature-detects an API and quietly
+does nothing without it. It renders in Chrome and in every `tap export`
+check, and comes out blank in the app, with no error card to catch. Two
+habits keep this from happening:
+
+- **A missing API gets a fallback, not a skip.** Feature-detect, then
+  draw something simpler on the other path: a still image for a decoded
+  animation, a static layout for an animated one.
+- **Check a deck headed for the app in WebKit.** `tap export images` and
+  `tap export pdf` take `--browser webkit`, which renders in Playwright's
+  WebKit build instead of Chromium. The first run downloads it.
+
+```bash
+tap export images deck.md --slide 3 --browser webkit --output webkit.png
+```
+
 ## Check a slide without opening a browser
 
 `tap export images` renders one slide state to a PNG through the same headless

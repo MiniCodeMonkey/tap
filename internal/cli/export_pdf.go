@@ -24,6 +24,7 @@ var (
 	pdfContent  string
 	pdfJSON     bool
 	pdfProgress string
+	pdfBrowser  string
 )
 
 // exportPDFCmd represents the export pdf command
@@ -60,6 +61,7 @@ func init() {
 	exportPDFCmd.Flags().StringVar(&pdfContent, "content", "slides", "content to include: slides, notes, or both")
 	exportPDFCmd.Flags().BoolVar(&pdfJSON, "json", false, "print the result as JSON")
 	exportPDFCmd.Flags().StringVar(&pdfProgress, "progress", "", "print progress to stderr as JSON lines (json)")
+	exportPDFCmd.Flags().StringVar(&pdfBrowser, "browser", "chromium", "browser engine to render in: chromium, or webkit (Safari's engine, which Tap Desktop presents in; slides only)")
 }
 
 // runExportPDF implements the export pdf command. It returns an error
@@ -104,6 +106,13 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 	contentType, err := pdf.ValidateContentType(pdfContent)
 	if err != nil {
 		return userError(codeUsage, err)
+	}
+	browser, err := pdf.ValidateBrowser(pdfBrowser)
+	if err != nil {
+		return userError(codeUsage, err)
+	}
+	if browser == pdf.BrowserWebKit && contentType != pdf.ContentSlides {
+		return userError(codeUsage, fmt.Errorf("--browser webkit renders slides only: notes pages are printed by Chromium"))
 	}
 
 	// Determine output path
@@ -185,6 +194,7 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 		spinner.stop()
 		return internalError(codeBrowser, fmt.Errorf("failed to create PDF exporter: %w", err))
 	}
+	exporter.SetBrowser(browser)
 
 	if progress.enabled() {
 		exporter.SetProgress(progress)
