@@ -20,9 +20,11 @@ public final class TapSession {
     /// process; `present` is a talk, started beside it.
     public enum Command: Equatable, Sendable {
         case dev
-        /// `record` false adds `--no-record` (Rehearse, or Play with the
-        /// record checkbox off); `presenterPassword` is the person's own,
-        /// otherwise tap generates one and prints it on the ready line;
+        /// `record` always becomes `--record` or `--no-record`, so the
+        /// Record switch decides and tap never asks or reads its saved
+        /// answer (Rehearse is never recorded); `presenterPassword` is the
+        /// person's own, otherwise tap generates one and prints it on the
+        /// ready line;
         /// `port` is the deck's remembered port, which tap binds exactly
         /// (or fails), and nil lets tap pick a free one.
         case present(record: Bool, presenterPassword: String?, port: Int?)
@@ -33,7 +35,7 @@ public final class TapSession {
                 return ["dev", "--app", deck.path]
             case .present(let record, let presenterPassword, let port):
                 var arguments = ["present", "--app"]
-                if !record { arguments.append("--no-record") }
+                arguments.append(record ? "--record" : "--no-record")
                 if let presenterPassword, !presenterPassword.isEmpty {
                     arguments += ["--presenter-password", presenterPassword]
                 }

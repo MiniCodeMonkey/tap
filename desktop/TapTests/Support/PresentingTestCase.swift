@@ -10,12 +10,11 @@ final class WeakTalk {
 }
 
 /// A hosted test that runs a talk with the bundled tap present, on the one
-/// screen the machine has. The consent question is answered ahead of time
-/// in the test's own settings folder, so tap asks nothing and records
-/// nothing; a test that wants the question removes the answer. On a host
-/// the probe found unable to enter full screen, the talk windows are
-/// plain windows over their frames and the tests that assert full screen
-/// skip; everything else runs.
+/// screen the machine has. A test that does not ask for a recording
+/// presents without one, since `PresentationOptions` records only when
+/// told to. On a host the probe found unable to enter full screen, the
+/// talk windows are plain windows over their frames and the tests that
+/// assert full screen skip; everything else runs.
 @MainActor
 class PresentingTestCase: HostedTestCase {
     /// The probe's verdict for this process (Task 3), never an environment variable.
@@ -23,7 +22,6 @@ class PresentingTestCase: HostedTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        try writeRecordingConsent(false)
         fullScreenAvailable = await FullScreenProbe.run().available
     }
 
@@ -56,16 +54,6 @@ class PresentingTestCase: HostedTestCase {
                 + (window.styleMask.contains(.fullScreen) ? " (fullScreen)" : "")
                 + " closed \(window.isClosed) takingDown \(window.isTakingDown) visible \(window.isVisible) onScreen \(onScreen.contains(window.windowNumber))]"
         }.joined(separator: ", ")
-    }
-
-    /// The CLI's own answer to the consent question, at present.record.
-    func writeRecordingConsent(_ record: Bool) throws {
-        try FileManager.default.createDirectory(at: settingsFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try "present:\n  record: \(record)\n".write(to: settingsFile, atomically: true, encoding: .utf8)
-    }
-
-    func removeRecordingConsent() throws {
-        if FileManager.default.fileExists(atPath: settingsFile.path) { try FileManager.default.removeItem(at: settingsFile) }
     }
 
     /// The real screen, as the only display.

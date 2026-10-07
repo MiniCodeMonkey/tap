@@ -133,15 +133,16 @@ Feature: Presenting
     Then Present Settings show a notice with an "Open Settings" button
     And the button opens Desktop & Dock in System Settings
 
-  Scenario: First talk asks about recording
-    Given I have never answered the recording question
+  Scenario: The Record switch decides
+    Given the Record switch in Present Settings is on
     When I start presenting
-    Then tap reports its consent question as an event                        # NEW --app event
-    And the app shows it as a sheet: "Record automatically every time you present?"
-    And tap saves my answer in ~/.config/tap/settings.yaml, shared with the CLI
+    Then the app starts tap present with --record, and no sheet asks whether to record
+    And tap neither reads nor saves a recording answer in ~/.config/tap/settings.yaml
+    When the Record switch is off
+    Then the app starts tap present with --no-record
 
   Scenario: Recording follows tap present
-    Given I answered yes
+    Given the Record switch is on
     Then tap records from the start of the talk, follows the projector, and guards disk space
     And the app shows "REC 12:04" or "NOT RECORDING" as tap reports it
 

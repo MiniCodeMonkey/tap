@@ -244,8 +244,8 @@ public struct PresentationOptions: Equatable, Sendable {
     public var mode: PresentationMode
     /// The slide the talk opens on, 1-based.
     public var startSlide: Int
-    /// False passes --no-record for this run. True leaves recording to tap's
-    /// own consent, stored in settings.yaml.
+    /// Whether this run records: the Record switch decides, passed to tap as
+    /// --record or --no-record.
     public var record: Bool
     /// Phone remote: tap's public tunnel, with the QR code panel. tap has
     /// no remote without the tunnel.
@@ -253,7 +253,7 @@ public struct PresentationOptions: Equatable, Sendable {
     /// The person's own presenter password for the remote, passed to tap.
     public var presenterPassword: String?
 
-    public init(mode: PresentationMode, startSlide: Int, record: Bool = true, phoneRemote: Bool = false,
+    public init(mode: PresentationMode, startSlide: Int, record: Bool = false, phoneRemote: Bool = false,
                 presenterPassword: String? = nil) {
         self.mode = mode
         self.startSlide = startSlide

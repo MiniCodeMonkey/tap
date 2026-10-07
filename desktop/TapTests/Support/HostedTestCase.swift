@@ -197,7 +197,7 @@ class HostedTestCase: XCTestCase {
     /// it, and `approvalAnswerForTests` answers Allow through the path a
     /// click takes, so tap writes the full record itself. The
     /// `approvals:` block is written whole, after whatever else the file
-    /// holds (the recording consent), in the shape yaml.v3 writes, so a
+    /// holds, in the shape yaml.v3 writes, so a
     /// file tap has written since is still one tap reads; earlier
     /// approvals in it are kept.
     func approveLiveCode(for deck: URL, drivers: [String]? = nil) throws {

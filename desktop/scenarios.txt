@@ -108,7 +108,7 @@ D4 | 05-presenting.feature | Phone remote
 D4 | 05-presenting.feature | Phone remote password
 D4 | 05-presenting.feature | Phone remote needs cloudflared
 D4 | 05-presenting.feature | Displays share one Space
-D4 | 05-presenting.feature | First talk asks about recording
+D4 | 05-presenting.feature | The Record switch decides
 D4 | 05-presenting.feature | Recording follows tap present
 D4 | 05-presenting.feature | Keep the recording
 D4 | 05-presenting.feature | Edit while presenting
@@ -155,5 +155,5 @@ D6 | 11-settings-and-cli.feature | Settings window
 D6 | 11-settings-and-cli.feature | Gemini key
 D6 | 11-settings-and-cli.feature | Install the tap command
 D6 | 11-settings-and-cli.feature | Another tap is already installed
-# D6 leaves "Shared settings" (11-settings-and-cli.feature) unclaimed: it also needs the recording consent through tap, which no tap command exposes; the person left it out of D6.
+# D6 leaves "Shared settings" (11-settings-and-cli.feature) unclaimed: it also needs the live code approvals through tap, which no tap command exposes; the person left it out of D6.
 D6 | 11-settings-and-cli.feature | General settings

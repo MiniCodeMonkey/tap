@@ -202,9 +202,8 @@ public struct TapErrorPayload: Codable, Equatable, Sendable, Error {
 
 /// What a `question` event carries. Each kind uses a few of the fields:
 /// `approval` the deck, the drivers a yes would allow, the ones an earlier
-/// yes allowed, and the blocks to read; `record-consent` the settings file
-/// the answer is saved to; `keep-recording` the run's folder and how many
-/// segments it has. See internal/cli/approval.go, app_questions.go and
+/// yes allowed, and the blocks to read; `keep-recording` the run's folder
+/// and how many segments it has. See internal/cli/approval.go, app_questions.go and
 /// app_session.go.
 public struct QuestionPayload: Codable, Equatable, Sendable {
     public let deck: String?

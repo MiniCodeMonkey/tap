@@ -5,10 +5,8 @@ import XCTest
 /// machine: it covers the screen. tap's settings and the app's own go to
 /// folders and suites of the test's own.
 final class PresentingUITests: UITestCase {
-    /// A settings folder with the recording question answered no, so the
-    /// talk asks nothing and records nothing.
     func configHome() throws -> URL {
-        try isolatedConfigHome(settings: "present:\n  record: false\n")
+        try isolatedConfigHome()
     }
 
     func launchForPresenting() throws -> XCUIApplication {
@@ -33,6 +31,9 @@ final class PresentingUITests: UITestCase {
         application.menuBarItems["Present"].menuItems["Present Settings…"].click()
         let start = application.buttons["start-presenting"]
         XCTAssertTrue(start.waitForExistence(timeout: 5), "Present Settings")
+        // The Record switch decides, and it starts on: the talk records nothing.
+        let record = application.switches["record-switch"]
+        if record.value as? String == "1" { record.click() }
         start.click()
         let audience = application.windows["audience-window"]
         XCTAssertTrue(audience.waitForExistence(timeout: 30), "the audience window covers the screen")

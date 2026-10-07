@@ -176,7 +176,7 @@ final class TalkApprovalTests: PresentingTestCase {
         presentation.screens = { screens }
         let available = fullScreenAvailable
         presentation.fullScreenAllowed = { available }
-        // The real tap present, which asks after the (pre-answered) consent.
+        // The real tap present, which asks about the approval.
         presentation.start(PresentationOptions(mode: .play, startSlide: 1))
         try await waitUntil(timeout: 30, "tap present's approval question") { presentation.pendingQuestion?.kind == "approval" }
         let sheet = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)

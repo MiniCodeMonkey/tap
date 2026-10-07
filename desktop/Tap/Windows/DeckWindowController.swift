@@ -1013,16 +1013,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         return ApprovalSheet(payload: question.payload, deckName: name)
     }
 
-    /// tap asked something. Consent, keep-recording and the live code
+    /// tap asked something. Keep-recording and the live code
     /// approval become sheets on this window; any other kind is declined,
     /// which runs no code.
     func presentQuestion(_ question: PresentationController.PendingQuestion) {
         let presentation = sessionController.presentation
         switch question.kind {
-        case "record-consent":
-            showQuestionSheet(QuestionSheet.consent(settingsPath: question.payload.settingsPath), questionID: question.id) { record in
-                presentation.answer(id: question.id, value: record)
-            }
         case "keep-recording":
             let directory = question.payload.directory ?? ""
             let sheet = QuestionSheet.keepRecording(directory: directory, segments: question.payload.segments ?? 0,

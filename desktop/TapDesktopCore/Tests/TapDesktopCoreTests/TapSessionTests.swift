@@ -201,6 +201,11 @@ final class TapSessionTests: XCTestCase {
         XCTAssertTrue(tap.log.text.contains("tap exited with status 2"))
     }
 
+    func testTheRecordSwitchAlwaysPassesOneOfTheTwoFlags() {
+        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: nil, port: nil).arguments(deck: deckURL), ["present", "--app", "--record", deckURL.path])
+        XCTAssertEqual(TapSession.Command.present(record: false, presenterPassword: nil, port: nil).arguments(deck: deckURL), ["present", "--app", "--no-record", deckURL.path])
+    }
+
     func testATalkRunsTapPresentWithItsFlagsAndHasItsOwnLogTitle() async throws {
         let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
         let tap = TapSession(deckURL: deckURL, configuration: TapSession.Configuration(
@@ -208,8 +213,8 @@ final class TapSessionTests: XCTestCase {
             command: .present(record: false, presenterPassword: "secret", port: 4242))
         XCTAssertEqual(tap.command.arguments(deck: deckURL), ["present", "--app", "--no-record", "--presenter-password", "secret", "--port", "4242", deckURL.path])
         XCTAssertEqual(tap.command.port, 4242)
-        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: nil, port: nil).arguments(deck: deckURL), ["present", "--app", deckURL.path])
-        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: "", port: nil).arguments(deck: deckURL), ["present", "--app", deckURL.path], "an empty password is no password")
+        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: nil, port: nil).arguments(deck: deckURL), ["present", "--app", "--record", deckURL.path])
+        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: "", port: nil).arguments(deck: deckURL), ["present", "--app", "--record", deckURL.path], "an empty password is no password")
         XCTAssertEqual(TapSession.Command.dev.arguments(deck: deckURL), ["dev", "--app", deckURL.path])
         XCTAssertNil(TapSession.Command.dev.port)
         XCTAssertEqual(tap.log.title, "talk, talk")

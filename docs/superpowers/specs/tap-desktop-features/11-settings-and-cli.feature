@@ -21,7 +21,7 @@ Feature: Settings and the tap command
     And the app never replaces or deletes it
 
   Scenario: Shared settings
-    Then the recording consent answer and live code approvals live in ~/.config/tap/settings.yaml
+    Then live code approvals live in ~/.config/tap/settings.yaml
     And the app reads and writes them through tap, so the CLI sees the same values
 
   Scenario: General settings

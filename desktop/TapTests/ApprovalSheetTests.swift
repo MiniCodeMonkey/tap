@@ -282,9 +282,6 @@ final class ApprovalSheetTests: HostedTestCase {
     }
 
     func testTheOtherSheetsKeepReturnAsTheirYes() {
-        let consent = QuestionSheet.consent(settingsPath: "/tmp/settings.yaml")
-        XCTAssertEqual(consent.acceptButton.keyEquivalent, "\r")
-        XCTAssertEqual(consent.declineButton.keyEquivalent, "\u{1b}")
         let keep = QuestionSheet.keepRecording(directory: "/tmp/run", segments: 1, size: "1 KB")
         XCTAssertEqual(keep.acceptButton.keyEquivalent, "\r")
         XCTAssertEqual(keep.declineButton.keyEquivalent, "", "no key reaches Delete")

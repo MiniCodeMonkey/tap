@@ -16,10 +16,10 @@ class QuestionSheet: NSWindow {
     }
 
     /// Which button Return presses. Accept for a question whose yes is
-    /// harmless (record consent, keep a recording); decline for the live
-    /// code approval, where the safe answer is the default one and Return
-    /// must never grant execution (06-live-code-and-trust, "The safe
-    /// button is the default").
+    /// harmless (keep a recording); decline for the live code
+    /// approval, where the safe answer is the default one and Return must
+    /// never grant execution (06-live-code-and-trust, "The safe button is
+    /// the default").
     enum ReturnAnswer {
         case accept
         case decline
@@ -122,16 +122,6 @@ class QuestionSheet: NSWindow {
 
     @objc private func acceptPressed(_ sender: Any?) {
         sheetParent?.endSheet(self, returnCode: .OK)
-    }
-
-    /// tap's record-consent question. `settingsPath` is where tap saves the answer.
-    static func consent(settingsPath: String?) -> QuestionSheet {
-        QuestionSheet(kind: "record-consent",
-                      title: "Record automatically every time you present?",
-                      body: "Tap records the projector screen and your microphone from the start of each talk until you stop, and follows the projector if the cable is swapped. You choose whether to keep each recording at the end. The answer is saved for you, not the deck; tap present in Terminal uses it too.",
-                      path: settingsPath,
-                      decline: "Don't Record",
-                      accept: "Record Automatically")
     }
 
     /// tap's keep-recording question, asked when Stop ends a run that

@@ -19,7 +19,7 @@ final class KeepRecordingTests: PresentingTestCase {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
         deckWindow.revealInFinder = { [weak self] url in self?.revealed.append(url) }
-        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, record: true))
         return (controller, deckWindow)
     }
 
@@ -114,7 +114,7 @@ final class KeepRecordingTests: PresentingTestCase {
         let (document, controller) = try await openDeckForPresenting()
         let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
         deckWindow.revealInFinder = { [weak self] url in self?.revealed.append(url) }
-        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, record: true))
         deckWindow.stopPresenting(nil)
         try await waitUntil(timeout: 10, "the question") { deckWindow.questionSheet?.kind == "keep-recording" }
         document.close()
@@ -130,7 +130,7 @@ final class KeepRecordingTests: PresentingTestCase {
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
         AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], quit: .askToKeep(directory: folder, segments: 2), recordingTo: record)
         let (document, controller) = try await openDeckForPresenting()
-        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, record: true))
         // Held strongly, so the last assertion reads the log whether or not the talk is gone.
         let log = try XCTUnwrap(controller.presentation.lastTalkLog)
         // The deck closes mid-talk: nobody is left to answer, so the app answers for tap's own default at once.
