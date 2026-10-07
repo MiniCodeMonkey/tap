@@ -112,6 +112,21 @@ function buildColorOverrideStyle(themeColors: ThemeColors | undefined): CSSPrope
 	return style as CSSProperties;
 }
 
+/**
+ * The scale that fits a base-sized canvas into a container. When the
+ * container is the canvas's aspect ratio to within a pixel, as a 16:9 box
+ * laid out in fractional device pixels is, the canvas fills it instead:
+ * the container clips the sub-pixel overflow, where a fit would leave a
+ * sub-pixel strip of black letterbox down each side.
+ */
+export function canvasScale(width: number, height: number, baseWidth: number, baseHeight: number): number {
+	const widthScale = width / baseWidth;
+	const heightScale = height / baseHeight;
+	const fill = Math.max(widthScale, heightScale);
+	const overflow = Math.max(baseWidth * fill - width, baseHeight * fill - height);
+	return overflow < 1 ? fill : Math.min(widthScale, heightScale);
+}
+
 export function SlideCanvas({
 	aspectRatio = '16:9',
 	theme = 'base',
@@ -137,7 +152,7 @@ export function SlideCanvas({
 			if (!container) return;
 			const rect = container.getBoundingClientRect();
 			if (rect.width === 0 || rect.height === 0) return;
-			setScale(Math.min(rect.width / baseWidth, rect.height / baseHeight));
+			setScale(canvasScale(rect.width, rect.height, baseWidth, baseHeight));
 		}
 
 		calculateScale();

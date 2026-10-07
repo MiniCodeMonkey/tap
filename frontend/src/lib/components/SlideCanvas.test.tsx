@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
-import { SlideCanvas } from './SlideCanvas';
+import { SlideCanvas, canvasScale } from './SlideCanvas';
 
 afterEach(cleanup);
 
@@ -209,5 +209,17 @@ describe('SlideCanvas', () => {
 
 			expect(() => unmount()).not.toThrow();
 		});
+	});
+});
+
+describe('canvasScale', () => {
+	it('fills a container that is 16:9 to within a pixel, so no letterbox strip shows', () => {
+		expect(canvasScale(1000, 562.4, 1920, 1080)).toBe(1000 / 1920);
+		expect(canvasScale(999.6, 562.5, 1920, 1080)).toBe(562.5 / 1080);
+	});
+
+	it('fits a container of another shape, letterboxing the rest', () => {
+		expect(canvasScale(1024, 768, 1920, 1080)).toBe(1024 / 1920);
+		expect(canvasScale(1000, 400, 1920, 1080)).toBe(400 / 1080);
 	});
 });
