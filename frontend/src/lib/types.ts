@@ -239,6 +239,8 @@ export interface Slide {
 	fragmentCount: number;
 	/** Number of presenter steps, including the initial state */
 	steps: number;
+	/** True on a split-media slide whose first step glides the media to the center. */
+	zoom?: boolean;
 	/**
 	 * True when the slide's skip directive is set. Presenting passes over it
 	 * and slide counts leave it out, but it keeps its place and its number

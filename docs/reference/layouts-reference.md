@@ -246,6 +246,10 @@ Redesigned for at-a-glance status.
 ![Dashboard screenshot](dashboard.png)
 ```
 
+Add `zoom: true` to the directive comment to zoom the media with one click:
+the media glides to the center of the slide and the text fades. See
+[`zoom`](/reference/slide-directives#zoom).
+
 ### blank
 
 Completely empty layout with no default styling. Full creative control.

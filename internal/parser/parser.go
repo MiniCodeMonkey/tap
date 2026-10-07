@@ -82,6 +82,10 @@ type SlideDirectives struct {
 	// ignored either way, and a caller that surfaces slide warnings should
 	// tell the deck author, the same way StepsInvalid does.
 	SkipInvalid bool
+	// Zoom is true when the slide's "zoom" directive is true. On a
+	// split-media slide it adds one step that glides the media to the
+	// center of the slide; other layouts ignore it.
+	Zoom bool
 }
 
 // CodeBlock represents a fenced code block in a slide.
@@ -611,6 +615,11 @@ var directiveFields = []directiveField{
 			return
 		}
 		d.SkipInvalid = true
+	}},
+	{"zoom", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["zoom"].(bool); ok {
+			d.Zoom = v
+		}
 	}},
 }
 
