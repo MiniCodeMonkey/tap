@@ -990,7 +990,16 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func windowDidBecomeMain(_ notification: Notification) {
+        refreshPresentingControls()
         showNextDeckQuestionIfIdle()
+    }
+
+    /// AppKit gives the toolbar back the enabled state it had when a sheet
+    /// began, and the keep-recording sheet begins while the talk is still
+    /// stopping. Its restore can land after the talk has gone idle, so the
+    /// Play button is set again once the sheet has fully ended.
+    func windowDidEndSheet(_ notification: Notification) {
+        refreshPresentingControls()
     }
 
     func windowDidChangeOcclusionState(_ notification: Notification) {
