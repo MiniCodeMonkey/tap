@@ -8,6 +8,7 @@ import {
 	resolveComponentURL
 } from './DeckComponent';
 import { Slot } from './Slot';
+import { useTheme } from '../tap';
 import { heldBlockers, resetBlockersForTests, subscribeToBlockers, type ReadyBlockerKind } from '$lib/ready/blockers';
 
 afterEach(() => cleanup());
@@ -108,6 +109,30 @@ describe('DeckComponent', () => {
 		);
 
 		expect((await findByTestId('widget')).textContent).toBe('hello');
+	});
+
+	it('gives useTheme the theme tokens when the bundle is already loaded and the component mounts in the same commit as its root', async () => {
+		function Swatch() {
+			return <p data-testid="swatch">{useTheme().bg}</p>;
+		}
+		const importer = vi.fn().mockResolvedValue({ default: Swatch });
+		const themeHost = document.body.appendChild(document.createElement('div'));
+		themeHost.setAttribute('data-theme', 'product');
+		themeHost.style.setProperty('--bg', '#fafaf6');
+		const mount = () =>
+			render(
+				<DeckComponent source="slides/Swatch.jsx" url="/components/Swatch-1.js" props={{}} slots={{}} slide={makeSlide()} step={0} steps={0} active printMode={false} importer={importer} />,
+				{ container: themeHost.appendChild(document.createElement('div')) }
+			);
+
+		const first = mount();
+		await first.findByTestId('swatch');
+		first.unmount();
+
+		const second = mount();
+		expect(second.getByTestId('swatch').textContent).toBe('#fafaf6');
+
+		themeHost.remove();
 	});
 
 	it('shows an error card with the class tap export images detects and the source path, in dev, on a build error', () => {

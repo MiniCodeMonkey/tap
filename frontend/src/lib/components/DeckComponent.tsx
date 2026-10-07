@@ -13,6 +13,7 @@ import {
 	Suspense,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -292,6 +293,12 @@ export function DeckComponent({
 	importer
 }: DeckComponentHostProps) {
 	const rootRef = useRef<HTMLDivElement | null>(null);
+	// The component mounts one commit after its root, so rootRef.current is
+	// set before any of its layout effects run (useTheme reads it there). A
+	// bundle already in lazyCache renders without suspending, which would
+	// otherwise mount it in the root's own commit, before the ref attaches.
+	const [rootMounted, setRootMounted] = useState(false);
+	useLayoutEffect(() => setRootMounted(true), []);
 
 	useEffect(() => {
 		if (css) loadStylesheet(css);
@@ -361,37 +368,39 @@ export function DeckComponent({
 				    the error card), but a different bundle is a fresh mount, so its
 				    error boundary starts clean instead of carrying over a failure
 				    from whatever used to be at this placeholder. */}
-				<DeckComponentBoundary
-					key={`${source}\u0000${url}`}
-					source={source}
-					buildFallback={buildFallback}
-					onCaught={markSettled}
-				>
-					<Suspense fallback={null}>
-						{/* Resets presence context to null instead of inheriting
-						    SlideTransition's outer <AnimatePresence initial={false}>,
-						    which otherwise reaches every motion element in a deck
-						    component's own tree and blocks its mount animation on
-						    the first render of the slide it starts on (a reload, a
-						    deep link, `tap export images --step k`). A component that
-						    wants its own AnimatePresence still nests one normally
-						    under this null value. */}
-						<PresenceContext.Provider value={null}>
-							{/* Print mode (and a settled capture, which passes printMode
-							    the same way) forces every Motion transform and layout
-							    animation in the component's tree to its end state
-							    instantly, so the ready signal's animation check never
-							    waits on one and a screenshot never lands mid-animation.
-							    It leaves opacity and color animations running - see
-							    DeckComponent.css for the CSS-driven animations this does
-							    not reach. */}
-							<MotionConfig reducedMotion={printMode ? 'always' : 'never'}>
-								<LazyComponent slots={slots} props={props} slide={slide} step={step} steps={steps} active={active} printMode={printMode} />
-								<ComponentSettled onSettled={markSettled} />
-							</MotionConfig>
-						</PresenceContext.Provider>
-					</Suspense>
-				</DeckComponentBoundary>
+				{rootMounted && (
+					<DeckComponentBoundary
+						key={`${source}\u0000${url}`}
+						source={source}
+						buildFallback={buildFallback}
+						onCaught={markSettled}
+					>
+						<Suspense fallback={null}>
+							{/* Resets presence context to null instead of inheriting
+							    SlideTransition's outer <AnimatePresence initial={false}>,
+							    which otherwise reaches every motion element in a deck
+							    component's own tree and blocks its mount animation on
+							    the first render of the slide it starts on (a reload, a
+							    deep link, `tap export images --step k`). A component that
+							    wants its own AnimatePresence still nests one normally
+							    under this null value. */}
+							<PresenceContext.Provider value={null}>
+								{/* Print mode (and a settled capture, which passes printMode
+								    the same way) forces every Motion transform and layout
+								    animation in the component's tree to its end state
+								    instantly, so the ready signal's animation check never
+								    waits on one and a screenshot never lands mid-animation.
+								    It leaves opacity and color animations running - see
+								    DeckComponent.css for the CSS-driven animations this does
+								    not reach. */}
+								<MotionConfig reducedMotion={printMode ? 'always' : 'never'}>
+									<LazyComponent slots={slots} props={props} slide={slide} step={step} steps={steps} active={active} printMode={printMode} />
+									<ComponentSettled onSettled={markSettled} />
+								</MotionConfig>
+							</PresenceContext.Provider>
+						</Suspense>
+					</DeckComponentBoundary>
+				)}
 			</DeckComponentContext.Provider>
 		</div>
 	);
