@@ -450,6 +450,7 @@ func TestDirectiveKeyNamesMatchesAppliedFields(t *testing.T) {
 		"scroll-speed": "2000",
 		"steps":        "5",
 		"skip":         "true",
+		"zoom":         "true",
 	}
 
 	if len(values) != len(directiveKeyNames) {

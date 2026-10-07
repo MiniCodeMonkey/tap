@@ -599,6 +599,41 @@ because you asked for it by number.
 
 ---
 
+### zoom
+
+On a `split-media` slide, adds one step that zooms the media.
+
+| Property | Value |
+|----------|-------|
+| Type | `boolean` |
+| Default | `false` |
+
+```markdown
+<!-- layout: split-media
+zoom: true -->
+
+# Assign a Linear issue
+
+Add the `research` label when you want an answer, not code.
+
+::media
+
+![Linear issue assigned to Yak](images/linear.png)
+```
+
+The first press of the clicker glides the media to the center of the slide,
+at the largest size that fits inside the slide padding, and fades the text.
+The theme's image frame moves with it. The next press goes to the next
+slide, and the previous key glides the media back.
+
+`tap export pdf`, the overview and the presenter's next-slide panel show the
+slide unzoomed, so the text stays readable there.
+`tap export images --step 1` renders the zoomed state. Other layouts ignore
+the directive and add no step for it. A `steps:` directive on the same slide
+still sets the step count.
+
+---
+
 ## Combining Directives
 
 Use multiple directives together in a single block:
@@ -646,6 +681,7 @@ notes: |
 | `scroll-speed` | integer | `2000` | Scroll reveal duration, in milliseconds |
 | `steps` | integer | Auto-detected | Clicker presses this slide consumes |
 | `skip` | boolean | `false` | Leave the slide out of presenting and exports |
+| `zoom` | boolean | `false` | On `split-media`, one step zooms the media to the center |
 
 ## Directive vs. Frontmatter
 

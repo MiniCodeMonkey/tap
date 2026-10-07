@@ -520,6 +520,33 @@
 	object-fit: contain;
 }
 
+/* zoom: true. LayoutSplitMedia reads the margin from scroll-padding, which
+ * resolves --slide-padding to px and does nothing else on this element, and
+ * measures the media with offsets, which need this element positioned. */
+.layout-split-media[data-zoom] {
+	position: relative;
+	scroll-padding: var(--slide-padding);
+}
+
+.layout-split-media[data-zoom] .slot-media {
+	position: relative;
+	z-index: 1;
+	transition: transform 1s var(--ease, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+
+.layout-split-media[data-zoom] .slot-default {
+	transition: opacity 0.6s ease;
+}
+
+.layout-split-media[data-zoom='in'] .slot-default {
+	opacity: 0;
+}
+
+.layout-split-media[data-settled] .slot-media,
+.layout-split-media[data-settled] .slot-default {
+	transition: none;
+}
+
 /* ============================================================================
  * Layout: blank - empty canvas
  * ============================================================================ */

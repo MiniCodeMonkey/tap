@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`--browser webkit`** on `tap export images` and `tap export pdf` - Renders in Playwright's WebKit, Safari's engine, instead of Chromium. Tap Desktop presents in WebKit, so this is the check for a deck headed for the app: a component that feature-detects a Chromium-only API and skips the work without it looks fine in Chrome and blank in the app. `webkit` renders slides only; the notes PDF formats are printed by Chromium. The first run downloads the WebKit build.
 - **`--progress json`** on `tap export pdf`, `tap export images` and `tap build` - One JSON line per step on stderr, such as `{"phase":"render","done":7,"total":14}`, download progress for the export browser on a first run, and a final line with the result. Made for scripts and for Tap Desktop.
 - **A ready signal for every page** - Each tap page reports when the slide on screen has finished rendering, through `window.__tapReady`, a `tap:ready` event, and a `tapReady` message for a macOS web view. Exports and Tap Desktop's thumbnails wait for it.
+- **`zoom: true` on `split-media`** - One click glides the media to the center of the slide at the largest size that fits, inside its image frame, and fades the text. The previous key glides it back. The PDF and thumbnails show the unzoomed slide; `tap export images --step 1` renders the zoomed one.
 - **`skip: true` leaves a slide out of the talk** - A skipped slide stays in the file and keeps its number, but the arrow keys pass over it in the audience and presenter views, slide numbers and the progress bar leave it out, and `tap build` and `tap export` leave it out of their output. `tap dev` still shows it with a "Skipped" marker when you open it directly.
 - **`tap slide list [deck]`** - Lists each slide with the lines it covers in the file, its layout, title, step and fragment counts, whether it is skipped, its errors, and its code blocks with their drivers. `--json` prints the same for editors and scripts.
 - **`tap deck schema`** - Lists every frontmatter key tap understands, with its type, default, allowed values and description. `--json` prints it for editors and tools.
@@ -46,6 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Every request body has a size limit** - 64 KB, and 8 MB for the desktop app's unsaved buffer. A larger body gets 413 before tap reads it. The same-origin JSON guard now covers every route that changes something, not only `/api/execute`.
 
 ### Fixed
+
+- **`tap build` showed no images in `split-media` and other slotted layouts** - The build rewrote image paths in the slide's HTML but not in its slots, which is what the page renders.
 
 - **Live code runs in `tap dev` and `tap present`** - The Run button answered "Driver registry not configured" in every real run. Both commands now load the built-in drivers and the deck's custom `drivers:`, run them in the deck's folder, and reload them when the deck changes.
 - **A live code block that also highlights lines runs again** - A fence such as `sql {driver: sqlite, connection: demo} {2-3}` lost its driver, because only the last `{...}` group was read, so the block had no Run button. Both groups now count, in either order.

@@ -43,6 +43,7 @@ var singleTokenDirectiveKeys = map[string]bool{
 	"scroll":       true,
 	"scroll-speed": true,
 	"steps":        true,
+	"zoom":         true,
 }
 
 // isPlausibleDirectiveValue reports whether value is a plausible value for

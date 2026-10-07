@@ -1660,3 +1660,25 @@ func TestLiveBlockJSONFields(t *testing.T) {
 		t.Errorf("JSON = %s", encoded)
 	}
 }
+
+func TestCountSteps_ZoomAddsAStepOnSplitMediaOnly(t *testing.T) {
+	tr := New(config.DefaultConfig())
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, Directives: parser.SlideDirectives{Layout: "split-media", Zoom: true}},
+			{Index: 1, Directives: parser.SlideDirectives{Layout: "two-column", Zoom: true}},
+			{Index: 2, Directives: parser.SlideDirectives{Layout: "split-media", Zoom: true, Steps: 0, HasSteps: true}},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if got := result.Slides[0]; !got.Zoom || got.Steps != 1 {
+		t.Errorf("split-media zoom: got zoom %v, steps %d; want true, 1", got.Zoom, got.Steps)
+	}
+	if got := result.Slides[1]; got.Zoom || got.Steps != 0 {
+		t.Errorf("two-column zoom: got zoom %v, steps %d; want false, 0", got.Zoom, got.Steps)
+	}
+	if got := result.Slides[2]; got.Steps != 0 {
+		t.Errorf("steps directive: got steps %d, want 0", got.Steps)
+	}
+}

@@ -98,6 +98,9 @@ type TransformedSlide struct {
 	Index         int                    `json:"index"`
 	Scroll        bool                   `json:"scroll,omitempty"`
 	ScrollSpeed   int                    `json:"scrollSpeed,omitempty"`
+	// Zoom is true on a split-media slide whose "zoom" directive is set:
+	// its first step glides the media to the center of the slide.
+	Zoom bool `json:"zoom,omitempty"`
 	// Component describes the whole-slide component when Layout is
 	// "component" (the slide's layout directive names a component file).
 	Component *WholeSlideComponent `json:"component,omitempty"`
@@ -340,7 +343,8 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 		}
 	}
 
-	transformed.Steps = t.countSteps(slide)
+	transformed.Zoom = slide.Directives.Zoom && transformed.Layout == "split-media"
+	transformed.Steps = t.countSteps(slide, transformed.Zoom)
 
 	// Set transition (per-slide directive overrides global config)
 	if slide.Directives.Transition != "" {
@@ -392,13 +396,17 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 // on the slide uses. The slide's own "steps" directive always wins.
 // Otherwise: a "map" fence gives a floor of 1 (the pre-existing rule); a
 // whole-slide component's static "export const steps" export and, for
-// inline components, the maximum across all of them, raise it further.
-func (t *Transformer) countSteps(slide parser.Slide) int {
+// inline components, the maximum across all of them, raise it further. A
+// zoom slide also gives a floor of 1.
+func (t *Transformer) countSteps(slide parser.Slide, zoom bool) int {
 	if slide.Directives.HasSteps {
 		return slide.Directives.Steps
 	}
 
 	steps := 0
+	if zoom {
+		steps = 1
+	}
 	for _, block := range slide.CodeBlocks {
 		if block.Language == "map" {
 			steps = 1

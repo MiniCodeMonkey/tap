@@ -756,7 +756,12 @@ func TestBuild_RewritesImagePathsInHTML(t *testing.T) {
 	cfg := config.DefaultConfig()
 	pres := &parser.Presentation{
 		Slides: []parser.Slide{
-			{Index: 0, HTML: `<p>Before</p><img src="photo.jpg"><p>After</p>`},
+			{
+				Index:     0,
+				HTML:      `<p>Before</p><img src="photo.jpg"><p>After</p>`,
+				Slots:     map[string]string{"default": `<p>Before</p>`, "media": `<img src="photo.jpg">`},
+				SlotOrder: []string{"default", "media"},
+			},
 		},
 	}
 
@@ -781,6 +786,10 @@ func TestBuild_RewritesImagePathsInHTML(t *testing.T) {
 	// Should NOT contain original path
 	if strings.Contains(html, `"photo.jpg"`) {
 		t.Error("original image path should be replaced")
+	}
+	// The slots carry the image too, and the frontend renders them
+	if strings.Contains(html, `/local/photo.jpg`) {
+		t.Error("image path in a slot should be rewritten to assets/")
 	}
 }
 

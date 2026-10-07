@@ -234,6 +234,11 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 		slide := &transformed.Slides[i]
 		slide.HTML = rewriteImagePaths(slide.HTML, pathMapping)
 		slide.HTML = rewriteAsciinemaPaths(slide.HTML, pathMapping)
+		// The frontend renders a layout's slots, not HTML, so they need the
+		// same paths.
+		for name, slot := range slide.Slots {
+			slide.Slots[name] = rewriteAsciinemaPaths(rewriteImagePaths(slot, pathMapping), pathMapping)
+		}
 	}
 
 	// Generate index.html with embedded presentation JSON
