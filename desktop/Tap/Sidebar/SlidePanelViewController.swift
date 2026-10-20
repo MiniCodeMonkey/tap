@@ -33,7 +33,10 @@ final class SlidePanelCollectionView: NSCollectionView {
 
     /// Delete (51) and Forward Delete (117) delete the selected slides. Only
     /// here, with the sidebar focused: in the editor these keys edit text.
+    /// A key that moves the selection, such as an arrow, reports the slide
+    /// it selected, not the one the mouse last clicked.
     override func keyDown(with event: NSEvent) {
+        clickedIndexPath = nil
         if event.keyCode == 51 || event.keyCode == 117 {
             onDelete?()
         } else {
