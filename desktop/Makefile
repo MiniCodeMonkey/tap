@@ -1,6 +1,13 @@
 # Tap Desktop. Run from the repo root with `make -C desktop <target>`.
 DERIVED_DATA = build/DerivedData
-XCODEBUILD = xcodebuild -project Tap.xcodeproj -derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
+SIGN_IDENTITY = -
+XCODEBUILD = xcodebuild -project Tap.xcodeproj -derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY=$(SIGN_IDENTITY) CODE_SIGNING_REQUIRED=NO
+# An ad-hoc app is known to macOS privacy settings by the hash of its
+# binary, so every rebuild loses its Screen Recording permission. `make
+# build` signs with the first Apple Development certificate in the
+# keychain, whose identity stays the same across builds; with none, as on
+# CI, it signs ad hoc.
+DEVELOPMENT_IDENTITY = $(or $(shell security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development/ { print $$2; exit }'),-)
 ONLY ?= TapTests
 # Every hosted test, UI test and benchmark has five minutes, so a hang
 # fails that one test with a timeout instead of the whole job. A test
@@ -22,6 +29,7 @@ project:
 core-test:
 	cd TapDesktopCore && swift test
 
+build: SIGN_IDENTITY = $(DEVELOPMENT_IDENTITY)
 build: project
 	$(XCODEBUILD) -scheme Tap -configuration Debug -destination 'platform=macOS' build
 
