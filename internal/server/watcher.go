@@ -41,7 +41,15 @@ type Watcher struct {
 	// a test replaces it before Start to drive the debounce without a wall
 	// clock.
 	afterFunc func(time.Duration, func()) stoppableTimer
-	running   bool
+	// deckPending and otherPending are what the current debounce window
+	// saw, guarded by mu: whether the deck itself changed, and the last
+	// other path. The window reports both, so a deck write followed by
+	// another file's write (an editor saving through a temporary file)
+	// still reports the deck, and a burst over many files (a git
+	// checkout) still costs at most two callbacks.
+	otherPending string
+	deckPending  bool
+	running      bool
 }
 
 // NewWatcher creates a new file watcher.
@@ -276,10 +284,7 @@ func (w *Watcher) IsRunning() bool {
 func (w *Watcher) run() {
 	defer close(w.doneCh)
 
-	var (
-		debounceTimer stoppableTimer
-		pendingPath   string
-	)
+	var debounceTimer stoppableTimer
 
 	for {
 		select {
@@ -340,20 +345,17 @@ func (w *Watcher) run() {
 			// Debounce: reset timer on each event
 			w.mu.Lock()
 			debounceTime := w.debounceTime
+			if event.Name == w.mdFile {
+				w.deckPending = true
+			} else {
+				w.otherPending = event.Name
+			}
 			w.mu.Unlock()
 
 			if debounceTimer != nil {
 				debounceTimer.Stop()
 			}
-			pendingPath = event.Name
-			// path is a fresh variable each iteration, so the closure below
-			// captures this event's path by value; pendingPath itself is
-			// read and written by this goroutine only; see AfterFunc's own
-			// goroutine, which never touches it.
-			path := pendingPath
-			debounceTimer = w.afterFunc(debounceTime, func() {
-				w.triggerOnChange(path)
-			})
+			debounceTimer = w.afterFunc(debounceTime, w.triggerPending)
 
 		case err, ok := <-w.watcher.Errors:
 			if !ok {
@@ -378,6 +380,23 @@ func (w *Watcher) readdFile() {
 	if _, err := os.Stat(w.mdFile); err == nil {
 		// File exists, try to re-add it
 		_ = w.watcher.Add(w.mdFile)
+	}
+}
+
+// triggerPending reports what the debounce window saw: the deck first if
+// it changed, then the last other path. A timer stopped after it started
+// running still reports what it took, and the next window starts empty.
+func (w *Watcher) triggerPending() {
+	w.mu.Lock()
+	deck, other := w.deckPending, w.otherPending
+	w.deckPending, w.otherPending = false, ""
+	w.mu.Unlock()
+
+	if deck {
+		w.triggerOnChange(w.mdFile)
+	}
+	if other != "" {
+		w.triggerOnChange(other)
 	}
 }
 

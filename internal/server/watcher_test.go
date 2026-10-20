@@ -1155,3 +1155,65 @@ func TestWatcher_IgnoreDir_RefusesDeckDirectory(t *testing.T) {
 		t.Error("onChange was not called for an asset change after IgnoreDir was given the deck directory")
 	}
 }
+
+// TestWatcher_BurstReportsEveryPath checks that a deck write is reported even
+// when another file in the deck folder changes in the same debounce window,
+// as an editor that saves through a temporary file does: each path the
+// burst touched gets its own callback once the window runs out.
+func TestWatcher_BurstReportsEveryPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	otherFile := filepath.Join(tmpDir, "notes.txt")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+	var mu sync.Mutex
+	var calls []string
+	w.SetOnChange(func(path string) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls = append(calls, path)
+	})
+	clock := &fakeDebounceClock{}
+	w.afterFunc = clock.afterFunc
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	if err := os.WriteFile(mdFile, []byte("# Changed"), 0644); err != nil {
+		t.Fatalf("failed to write deck: %v", err)
+	}
+	waitForGeneration(t, clock, 0)
+	waitForQuiet(t, clock, 300*time.Millisecond)
+	other := clock.advance()
+	if err := os.WriteFile(otherFile, []byte("other"), 0644); err != nil {
+		t.Fatalf("failed to write other file: %v", err)
+	}
+	waitForGeneration(t, clock, other)
+	waitForQuiet(t, clock, 300*time.Millisecond)
+
+	live := clock.live()
+	if len(live) != 1 {
+		t.Fatalf("%d debounce timers are pending, want exactly 1", len(live))
+	}
+	clock.fire(live[0])
+
+	mu.Lock()
+	defer mu.Unlock()
+	seen := map[string]int{}
+	for _, path := range calls {
+		seen[path]++
+	}
+	if seen[w.WatchedFile()] != 1 {
+		t.Errorf("the deck was reported %d times, want 1; calls = %v", seen[w.WatchedFile()], calls)
+	}
+	if seen[otherFile] != 1 {
+		t.Errorf("the other file was reported %d times, want 1; calls = %v", seen[otherFile], calls)
+	}
+}
