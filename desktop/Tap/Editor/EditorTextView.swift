@@ -1366,6 +1366,19 @@ final class EditorTextView: NSTextView {
         guard let window else { return rect }
         return window.convertToScreen(convert(rect, to: nil))
     }
+
+    /// NSTextView is its own viewport delegate, but does not declare it, so
+    /// this runs NSTextView's own handling first through the runtime. The
+    /// text is drawn in subviews that every layout pass moves, while the
+    /// boxes and the Deck card are drawn in this view's background, which
+    /// NSTextView does not redraw after a pass. Without this, a restyle
+    /// moves the text and leaves the boxes where the old layout put them.
+    @objc func textViewportLayoutControllerDidLayout(_ controller: NSTextViewportLayoutController) {
+        typealias DidLayout = @convention(c) (AnyObject, Selector, NSTextViewportLayoutController) -> Void
+        let selector = #selector(textViewportLayoutControllerDidLayout(_:))
+        unsafeBitCast(class_getMethodImplementation(NSTextView.self, selector), to: DidLayout.self)(self, selector, controller)
+        setNeedsDisplay(visibleRect)
+    }
 }
 
 extension EditorTextView: NSTextContentStorageDelegate {
