@@ -22,7 +22,7 @@ RELEASE_APP = $(DERIVED_DATA)/Build/Products/Release/Tap.app
 RELEASE_BINARY = $(RELEASE_APP)/Contents/MacOS/Tap
 RELEASE_DIR = build/release
 
-.PHONY: project core-test build test test-build uitest bench bench-build app-path check-scenarios check-release-hooks release-build check-release-app-hooks release-tests release
+.PHONY: project core-test build run test test-build uitest bench bench-build app-path check-scenarios check-release-hooks release-build check-release-app-hooks release-tests release
 project:
 	xcodegen generate --spec project.yml --quiet
 
@@ -54,6 +54,12 @@ test-build: project
 
 bench-build: project
 	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' build-for-testing
+
+# Builds the app and opens the new build. A running Tap is quit first
+# (it autosaves), since `open` would otherwise bring the old one forward.
+run: build
+	@osascript -e 'quit app id "io.geocod.tap.desktop"' 2>/dev/null || true
+	open $(DERIVED_DATA)/Build/Products/Debug/Tap.app
 
 app-path:
 	@echo $(DERIVED_DATA)/Build/Products/Debug/Tap.app

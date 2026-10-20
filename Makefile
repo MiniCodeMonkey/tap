@@ -24,6 +24,11 @@ all: build
 frontend:
 	cd frontend && npm run build
 
+# Build the frontend and the desktop app, then open it
+.PHONY: desktop
+desktop: frontend
+	$(MAKE) -C desktop run
+
 # Build the binary (includes frontend)
 .PHONY: build
 build: frontend
