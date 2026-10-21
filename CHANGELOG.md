@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.0.0-rc.2] - 2026-10-21
+
 ### Added
 
 - **`tap present`** - Give a talk without live reload, and optionally record every run, following the projector across HDMI swaps.
