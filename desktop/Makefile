@@ -57,8 +57,10 @@ bench-build: project
 
 # Builds the app and opens the new build. A running Tap is quit first
 # (it autosaves), since `open` would otherwise bring the old one forward.
+# The quit returns before the app exits, so this waits up to 10 seconds.
 run: build
 	@osascript -e 'quit app id "io.geocod.tap.desktop"' 2>/dev/null || true
+	@for attempt in $$(seq 50); do pgrep -qf "$(DERIVED_DATA)/Build/Products/Debug/Tap.app/Contents/MacOS/Tap" || break; sleep 0.2; done
 	open $(DERIVED_DATA)/Build/Products/Debug/Tap.app
 
 app-path:
