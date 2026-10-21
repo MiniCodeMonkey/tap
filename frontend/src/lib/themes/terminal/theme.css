@@ -840,8 +840,6 @@
 [data-theme='terminal'] pre.shiki {
 	position: relative;
 	z-index: 0;
-	/* The mode label hangs over the bottom border, so the block must not clip. */
-	overflow: visible;
 	padding: 36px 48px 32px;
 	border: 3px solid var(--muted);
 	font-family: var(--font-mono);
@@ -850,18 +848,6 @@
 	font-weight: 500;
 	letter-spacing: 0;
 	animation: terminal-pop 100ms steps(2, jump-none) 600ms both;
-}
-[data-theme='terminal'] pre.shiki::after {
-	content: '-- NORMAL --';
-	position: absolute;
-	left: 36px;
-	bottom: -24px;
-	padding: 0 16px;
-	font-size: 32px;
-	line-height: 44px;
-	font-weight: 800;
-	color: var(--accent-text);
-	background: var(--bg);
 }
 [data-theme='terminal'] pre.shiki code {
 	display: flex;
