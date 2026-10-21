@@ -200,7 +200,7 @@ public struct SlideRangeTracker: Sendable {
     }
 
     /// The regions around every box whose range is in one list and not the other.
-    static func changedRegions(old: [SlideBox], new: [SlideBox], length: Int) -> [NSRange] {
+    public static func changedRegions(old: [SlideBox], new: [SlideBox], length: Int) -> [NSRange] {
         struct Key: Hashable { let location: Int; let length: Int }
         let oldKeys = Set(old.map { Key(location: $0.range.location, length: $0.range.length) })
         let newKeys = Set(new.map { Key(location: $0.range.location, length: $0.range.length) })

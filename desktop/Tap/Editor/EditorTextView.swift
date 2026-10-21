@@ -140,12 +140,10 @@ final class EditorTextView: NSTextView {
     /// text was replaced is refused: it describes a document that is gone.
     @discardableResult
     func apply(_ list: SlideList, sentText: String, sentGeneration: Int) -> Bool {
-        let oldErrors = Dictionary(boxes.map { ("\($0.range.location):\($0.range.length)", Self.errorLineCount(for: $0.slide)) }) { first, _ in first }
+        let oldBoxes = boxes
         guard var dirty = tracker.apply(list, sentText: sentText, sentGeneration: sentGeneration,
                                         currentLength: (string as NSString).length) else { return false }
-        for box in boxes where oldErrors["\(box.range.location):\(box.range.length)"].map({ $0 != Self.errorLineCount(for: box.slide) }) ?? false {
-            dirty.append(box.range)
-        }
+        dirty += rangesWithChangedErrors(since: oldBoxes)
         if !dirty.isEmpty {
             textStorage?.beginEditing()
             dirty.forEach(restyle)
@@ -161,14 +159,29 @@ final class EditorTextView: NSTextView {
     /// Adopts boxes the app built by permuting tap's own ranges, right
     /// after a slide operation changed the text, so the boxes and the
     /// sidebar show the new order without waiting for tap's next answer.
+    /// Only the regions around changed boxes are restyled: restyling every
+    /// paragraph throws away the layout of the whole document, whose
+    /// estimated height then collapses and drags the scroll position with it.
     func adoptBoxes(_ newBoxes: [SlideBox]) {
+        let oldBoxes = boxes
         tracker.adopt(newBoxes)
+        let dirty = SlideRangeTracker.changedRegions(old: oldBoxes, new: boxes, length: (string as NSString).length)
+            + rangesWithChangedErrors(since: oldBoxes)
         textStorage?.beginEditing()
-        restyle(NSRange(location: 0, length: (string as NSString).length))
+        dirty.forEach(restyle)
         textStorage?.endEditing()
         updateHiddenLayout()
         updateCurrentBox()
         needsDisplay = true
+    }
+
+    /// The boxes whose error lines changed since `oldBoxes`: their first
+    /// paragraph makes room for a different number of lines.
+    private func rangesWithChangedErrors(since oldBoxes: [SlideBox]) -> [NSRange] {
+        let oldErrors = Dictionary(oldBoxes.map { ("\($0.range.location):\($0.range.length)", Self.errorLineCount(for: $0.slide)) }) { first, _ in first }
+        return boxes.filter { box in
+            oldErrors["\(box.range.location):\(box.range.length)"].map { $0 != Self.errorLineCount(for: box.slide) } ?? false
+        }.map(\.range)
     }
 
     /// The error lines a box makes room for: the slide's own and its blocks' problems.
