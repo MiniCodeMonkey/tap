@@ -248,8 +248,10 @@ final class RecordingStepCard: FlippedView {
         top.orientation = .horizontal
         top.alignment = .centerY
         top.spacing = 14
+        // The spacer sets the gap after the text, so the text keeps no gap of its own: the waiting card's row fits its column.
+        top.setCustomSpacing(0, after: text)
 
-        let breadcrumb = setupLabel("Privacy & Security › Screen & System Audio Recording", size: 11, weight: .regular, color: WelcomeColor.text3, wrapWidth: 160)
+        let breadcrumb = setupLabel("Privacy & Security › Screen & System Audio Recording", size: 11, weight: .regular, color: WelcomeColor.text3, wrapWidth: 168)
         breadcrumb.font = .systemFont(ofSize: 11)
         let preview = NSStackView(views: [breadcrumb, settingsRow])
         preview.orientation = .vertical
@@ -264,7 +266,6 @@ final class RecordingStepCard: FlippedView {
         guide.orientation = .horizontal
         guide.distribution = .fillEqually
         guide.alignment = .centerY
-        // Two equal columns, each its widest wrap plus the preview's insets, fit the card's 392 points with room to spare.
         guide.spacing = 12
         guide.isHidden = true
 
@@ -304,7 +305,7 @@ final class RecordingStepCard: FlippedView {
         field.attributedStringValue = text
         field.isSelectable = false
         field.maximumNumberOfLines = 0
-        field.preferredMaxLayoutWidth = 176
+        field.preferredMaxLayoutWidth = 184
         return field
     }
 

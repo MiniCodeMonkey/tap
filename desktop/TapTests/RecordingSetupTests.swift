@@ -56,12 +56,13 @@ final class RecordingSetupTests: HostedTestCase {
                 check("microphone \(microphone), screen \(screenAllowed)")
             }
         }
-        // Waiting in System Settings: the screen card shows its status and the guide.
-        permissions.microphone = .allowed
-        permissions.screenRecordingAllowed = false
+        // Waiting in System Settings: the screen card shows its status and the guide. Set on the cards, since
+        // pressing Open Settings would leave the shared view waiting for the tests after this one.
+        setup.microphoneCard.update(isDone: true, isCurrent: false, action: .none)
+        setup.screenCard.update(isDone: false, isCurrent: true, action: .waiting)
+        window.layoutIfNeeded()
+        XCTAssertEqual(window.contentView?.frame.size, WelcomeRootView.windowSize, "waiting for System Settings")
         setup.refresh()
-        setup.screenCard.button.performClick(nil)
-        check("waiting for System Settings")
     }
 
     func testSetUpRecordingBeforeTheFirstTalk() async throws {
