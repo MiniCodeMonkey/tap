@@ -484,9 +484,8 @@ export default function PresenterApp() {
 						Slides
 					</a>
 
-					<div className={`presenter-connection-status${connected ? ' connected' : ''}`}>
-						{connected ? 'Connected' : 'Disconnected'}
-					</div>
+					{/* Only a lost connection is worth the speaker's attention. */}
+					{!connected && <div className="presenter-connection-status">Disconnected</div>}
 				</header>
 
 				<main

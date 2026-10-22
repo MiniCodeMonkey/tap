@@ -432,9 +432,13 @@ final class PresentPopoverTests: PresentingTestCase {
         XCTAssertEqual(deckWindow.playButton.segmentCount, 2, "a play segment and a chevron")
         XCTAssertTrue(deckWindow.playButton.isEnabled)
         deckWindow.rehearse(nil)
-        XCTAssertFalse(deckWindow.playButton.isEnabled, "no second talk while one runs")
+        XCTAssertTrue(deckWindow.playButton.isStop, "while the talk runs, Play is Stop")
+        XCTAssertTrue(deckWindow.playButton.isEnabled)
+        XCTAssertEqual(deckWindow.playButton.currentToolTip, "Stop the talk")
         try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
-        try await stopPresenting(controller)
+        deckWindow.playButtonClicked(modifiers: [])
+        try await waitUntil(timeout: 30, "the end") { controller.presentation.state == .idle }
+        XCTAssertFalse(deckWindow.playButton.isStop)
         XCTAssertTrue(deckWindow.playButton.isEnabled)
     }
 

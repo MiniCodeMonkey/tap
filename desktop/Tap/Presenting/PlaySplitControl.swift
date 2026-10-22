@@ -37,7 +37,18 @@ final class PlaySplitControl: NSSegmentedControl {
         didSet { applyReadiness() }
     }
     /// The tooltip now: the reason for the dimming, or the normal one.
-    var currentToolTip: String? { isGettingReady ? Self.gettingReadyToolTip : readyToolTip }
+    var currentToolTip: String? { isStop ? "Stop the talk" : isGettingReady ? Self.gettingReadyToolTip : readyToolTip }
+
+    /// True while this deck's talk runs: the play segment shows a stop glyph and a click on it ends the talk.
+    var isStop = false {
+        didSet {
+            guard isStop != oldValue else { return }
+            glyphView.image = NSImage(systemSymbolName: isStop ? "stop.fill" : "play.fill", accessibilityDescription: nil)
+            image(forSegment: 0)?.accessibilityDescription = isStop ? "Stop" : "Play"
+            needsLayout = true
+            applyReadiness()
+        }
+    }
 
     private func applyReadiness() {
         toolTip = currentToolTip

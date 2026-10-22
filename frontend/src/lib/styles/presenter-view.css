@@ -122,11 +122,6 @@
   color: #ff5252;
 }
 
-.presenter-connection-status.connected {
-  background-color: rgba(78, 204, 163, 0.2);
-  color: #4ecca3;
-}
-
 /* ============================================================================
  * Main Content - Grid layout for slides and notes
  * ============================================================================ */
