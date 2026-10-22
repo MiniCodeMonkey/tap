@@ -377,11 +377,27 @@ final class PresentPopoverTests: PresentingTestCase {
         XCTAssertEqual(popover.options(mode: .play).phoneRemote, false, "and starts without the remote")
         popover.phoneRemoteSwitch.performClick(nil)
         XCTAssertTrue(popover.cloudflaredBlock.isHidden, "no complaint with the remote off")
+        let heightWithTheRemoteOff = popover.contentSize.height
+        popover.phoneRemoteSwitch.performClick(nil)
+        XCTAssertGreaterThan(popover.contentSize.height, heightWithTheRemoteOff, "the remote's options make room for themselves")
+        popover.phoneRemoteSwitch.performClick(nil)
+        XCTAssertEqual(popover.contentSize.height, heightWithTheRemoteOff, accuracy: 0.5, "and give it back when they hide")
         popover.phoneRemoteSwitch.performClick(nil)
         AppEnvironment.shared.cloudflaredProbe = { true }
         deckWindow.showPresentSettings(nil)
         XCTAssertTrue(popover.cloudflaredInstalled)
         XCTAssertTrue(popover.cloudflaredBlock.isHidden, "installing it clears the message")
+        popover.close()
+
+        // Installed while the popover is up: the next flip of the switch looks again.
+        AppEnvironment.shared.cloudflaredProbe = { false }
+        deckWindow.showPresentSettings(nil)
+        XCTAssertFalse(popover.cloudflaredBlock.isHidden)
+        AppEnvironment.shared.cloudflaredProbe = { true }
+        popover.phoneRemoteSwitch.performClick(nil)
+        popover.phoneRemoteSwitch.performClick(nil)
+        XCTAssertTrue(popover.cloudflaredBlock.isHidden, "installing it with the popover up clears the message")
+        XCTAssertEqual(popover.options(mode: .play).phoneRemote, true)
         popover.close()
     }
 
@@ -416,10 +432,14 @@ final class PresentPopoverTests: PresentingTestCase {
         XCTAssertEqual(deckWindow.playButton.segmentCount, 2, "a play segment and a chevron")
         XCTAssertTrue(deckWindow.playButton.isEnabled)
         deckWindow.rehearse(nil)
-        XCTAssertFalse(deckWindow.playButton.isEnabled, "no second talk while one runs")
-        try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
-        try await stopPresenting(controller)
+        XCTAssertTrue(deckWindow.playButton.isStop, "while the talk runs, Play is Stop")
         XCTAssertTrue(deckWindow.playButton.isEnabled)
+        XCTAssertEqual(deckWindow.playButton.currentToolTip, "Stop the talk")
+        try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
+        deckWindow.playButtonClicked(modifiers: [])
+        try await waitUntil(timeout: 30, "the end") { controller.presentation.state == .idle }
+        XCTAssertFalse(deckWindow.playButton.isStop)
+        try await waitUntil(timeout: 10, "Play, once the talk's windows are down") { deckWindow.playButton.isEnabled }
     }
 
     func testTheToolbarOrder() async throws {

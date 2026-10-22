@@ -646,12 +646,17 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         playButtonClicked(modifiers: NSApp.currentEvent?.modifierFlags ?? [])
     }
 
-    /// A click on the toolbar's Play: the talk starts at once, from the
+    /// A click on the toolbar's Play: while this deck's talk runs it is Stop.
+    /// Otherwise the talk starts at once, from the
     /// cursor's slide, or with Shift from slide 1. With two or more displays,
     /// Present Settings opens instead when this deck was never played, or the
     /// connected displays are not the ones it was last played on, so nobody
     /// starts on the wrong screen. One display leaves nothing to choose.
     func playButtonClicked(modifiers: NSEvent.ModifierFlags) {
+        if playButton.isStop {
+            stopPresenting(nil)
+            return
+        }
         guard canStartATalk else { return }
         guard !needsSettingsBeforePlaying else {
             showPresentSettings(nil)
@@ -836,7 +841,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     /// The toolbar's Play button follows the talk: off while one runs.
     func refreshPresentingControls() {
-        playButton.isEnabled = canStartATalk
+        let isPresenting = sessionController.presentation.isActive
+        playButton.isStop = isPresenting
+        playButton.isEnabled = canStartATalk || isPresenting
     }
 
     /// Whether a talk may start from this window now: the talk's own rule,

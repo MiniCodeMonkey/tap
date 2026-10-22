@@ -248,6 +248,8 @@ final class RecordingStepCard: FlippedView {
         top.orientation = .horizontal
         top.alignment = .centerY
         top.spacing = 14
+        // The spacer sets the gap after the text, so the text keeps no gap of its own: the waiting card's row fits its column.
+        top.setCustomSpacing(0, after: text)
 
         let breadcrumb = setupLabel("Privacy & Security › Screen & System Audio Recording", size: 11, weight: .regular, color: WelcomeColor.text3, wrapWidth: 168)
         breadcrumb.font = .systemFont(ofSize: 11)

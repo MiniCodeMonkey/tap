@@ -33,7 +33,9 @@ final class PresentingUITests: UITestCase {
         XCTAssertTrue(start.waitForExistence(timeout: 5), "Present Settings")
         // The Record switch decides, and it starts on: the talk records nothing.
         let record = application.switches["record-switch"]
-        if record.value as? String == "1" { record.click() }
+        // A switch's value is an NSNumber here, not a string.
+        if "\(record.value ?? "")" == "1" { record.click() }
+        XCTAssertEqual("\(record.value ?? "")", "0", "recording is off, so the runner shows no permission dialog")
         start.click()
         let audience = application.windows["audience-window"]
         XCTAssertTrue(audience.waitForExistence(timeout: 30), "the audience window covers the screen")

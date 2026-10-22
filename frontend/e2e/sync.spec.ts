@@ -6,7 +6,7 @@ import { test, expect, type Page } from '@playwright/test';
  * long as the socket actually takes to open.
  */
 async function waitForPresenterConnected(page: Page): Promise<void> {
-  await expect(page.locator('.presenter-connection-status.connected')).toBeVisible();
+  await expect(page.locator('.presenter-header[data-connected="true"]')).toBeVisible();
 }
 
 /**
