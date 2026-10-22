@@ -439,7 +439,7 @@ final class PresentPopoverTests: PresentingTestCase {
         deckWindow.playButtonClicked(modifiers: [])
         try await waitUntil(timeout: 30, "the end") { controller.presentation.state == .idle }
         XCTAssertFalse(deckWindow.playButton.isStop)
-        XCTAssertTrue(deckWindow.playButton.isEnabled)
+        try await waitUntil(timeout: 10, "Play, once the talk's windows are down") { deckWindow.playButton.isEnabled }
     }
 
     func testTheToolbarOrder() async throws {

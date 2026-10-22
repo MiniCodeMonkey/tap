@@ -442,7 +442,7 @@ export default function PresenterApp() {
 	} else {
 		content = (
 			<div className="presenter-view" data-presenter-layout={layout} data-notes-size={notesSizeMode}>
-				<header className="presenter-header">
+				<header className="presenter-header" data-connected={connected}>
 					<div className="presenter-slide-counter">
 						<span className="current">{presentedNumber ?? 'Skipped'}</span>
 						<span className="separator">/</span>
