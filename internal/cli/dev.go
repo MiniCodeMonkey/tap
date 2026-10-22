@@ -1137,6 +1137,7 @@ func runDevServer(options serverOptions) (err error) {
 				Muted("  Deleted the recording.\n")
 			default:
 				Success("  Recording kept: %s\n", summary.Dir)
+				printExport(exportEvent(summary.Dir))
 			}
 		} else if result, err := recordings.Stop(); err == nil && result.Path != "" {
 			// Quitting the TUI stops a running recording without going

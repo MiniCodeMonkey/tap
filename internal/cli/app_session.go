@@ -730,6 +730,7 @@ func (session *appSession) finishRecording(joiner *quitJoiner, askToKeep bool) {
 		fmt.Fprintln(log, "Deleted the recording.")
 	default:
 		fmt.Fprintf(log, "Recording kept: %s\n", summary.Dir)
+		session.options.Events.emit(exportEvent(summary.Dir))
 	}
 	session.options.Events.emit(sampleRecording(present, session.options.DiskStatus))
 }

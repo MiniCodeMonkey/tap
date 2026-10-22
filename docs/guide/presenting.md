@@ -81,8 +81,9 @@ recordings/my-talk-2026-09-21-1932/
 ```
 
 Each file is a segment; a new one starts whenever the recorded display
-changes (see below), or when you press **c**. Tap does not join segments
-into one file.
+changes (see below), or when you press **c**. When the run ends, Tap
+finishes the folder for you (see [Finishing a recording](#finishing-a-recording)),
+and the segments are kept as they are.
 
 `chapters.txt` covers the whole run, one section per segment headed by the
 file name:
@@ -103,6 +104,42 @@ file name:
 through the deck while you get set up, then going back to the title,
 doesn't count: a later departure replaces the mark, so the entry always
 reflects when the talk actually began.
+
+## Finishing a recording
+
+When you keep a recording, Tap starts a background job that turns the folder
+into something you can upload. It needs [ffmpeg](https://ffmpeg.org) and
+writes three files next to the segments:
+
+```
+recordings/my-talk-2026-09-21-1932/
+  talk.mov             every segment joined, not re-encoded
+  talk.mp4             the talk itself, ready for YouTube
+  talk-chapters.txt    chapters for talk.mp4, ready to paste into the description
+  finish.log           what the job printed
+```
+
+- `talk.mov` is skipped when there is only one segment, since that file is
+  the talk.
+- `talk.mp4` starts at the `Talk starts` mark, or at the beginning when
+  there is none. The video is copied, not re-encoded, so the cut lands on the
+  keyframe at or before the mark and the file can begin a few seconds early.
+  The audio is normalized to -14 LUFS with a true peak of -1 dBTP, the level
+  YouTube plays at, in two passes so the whole talk gets one gain.
+- `talk-chapters.txt` lists the slide chapters in `talk.mp4` time, starting
+  at `0:00`, with the offsets worked out across segments from each file's real
+  length. Nothing is merged or dropped. `chapters.txt` is not changed.
+
+The job runs on its own, so quitting Tap does not stop it. A talk of 85
+minutes takes a few minutes. Watch `finish.log` for progress and errors.
+
+Without ffmpeg, Tap keeps the raw files and says so. Install it, then finish
+the folder by hand. This also works on a recording from an earlier version:
+
+```bash
+brew install ffmpeg
+tap record finish recordings/my-talk-2026-09-21-1932
+```
 
 The deck's `recording` frontmatter block still applies: `output`, `audio`,
 `showClicks`, and `chapters` all work the same as in `tap dev`. See the

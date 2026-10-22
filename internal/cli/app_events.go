@@ -14,15 +14,16 @@ import (
 
 // Event types on standard output in --app mode.
 const (
-	appEventReady          = "ready"
-	appEventFileChanged    = "file-changed"
-	appEventQuestion       = "question"
-	appEventQuestionClosed = "question-closed"
-	appEventRecording      = "recording"
-	appEventTunnel         = "tunnel"
-	appEventSlide          = "slide"
-	appEventError          = "error"
-	appEventDeckProblems   = "deck-problems"
+	appEventReady           = "ready"
+	appEventFileChanged     = "file-changed"
+	appEventQuestion        = "question"
+	appEventQuestionClosed  = "question-closed"
+	appEventRecording       = "recording"
+	appEventRecordingExport = "recording-export"
+	appEventTunnel          = "tunnel"
+	appEventSlide           = "slide"
+	appEventError           = "error"
+	appEventDeckProblems    = "deck-problems"
 )
 
 // Codes of the error events tap sends while it runs in --app mode. A fatal
@@ -105,6 +106,20 @@ type appRecordingEvent struct {
 	Segment int    `json:"segment"`
 	Elapsed int    `json:"elapsed"`
 	Disk    string `json:"disk"`
+}
+
+// appRecordingExportEvent reports what happened to the export of a kept
+// recording: State is "started" with the path of the log the export
+// writes, "unavailable" when ffmpeg is missing and the raw files are all
+// there is, or "failed" when the export could not be started.
+//
+//nolint:govet // fieldalignment: field order is the JSON output order
+type appRecordingExportEvent struct {
+	Type      string `json:"type"`
+	State     string `json:"state"`
+	Directory string `json:"directory"`
+	Log       string `json:"log,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 // appTunnelEvent is the tunnel state: "starting", "running" with the

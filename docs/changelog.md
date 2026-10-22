@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **`tap record finish <folder>`** - Joins a recording's segments into `talk.mov`, cuts `talk.mp4` from the `Talk starts` mark with the video copied and the audio normalized to -14 LUFS, and writes `talk-chapters.txt` timed to that video. `tap present` runs it in the background when a kept recording ends, and logs to `finish.log` in the recording folder. Needs ffmpeg; without it the raw files are kept and Tap says how to finish them later.
 - **`--browser webkit`** on `tap export images` and `tap export pdf` - Renders in Playwright's WebKit, Safari's engine, instead of Chromium. Tap Desktop presents in WebKit, so this is the check for a deck headed for the app: a component that feature-detects a Chromium-only API and skips the work without it looks fine in Chrome and blank in the app. `webkit` renders slides only; the notes PDF formats are printed by Chromium. The first run downloads the WebKit build.
 - **`--progress json`** on `tap export pdf`, `tap export images` and `tap build` - One JSON line per step on stderr, such as `{"phase":"render","done":7,"total":14}`, download progress for the export browser on a first run, and a final line with the result. Made for scripts and for Tap Desktop.
 - **A ready signal for every page** - Each tap page reports when the slide on screen has finished rendering, through `window.__tapReady`, a `tap:ready` event, and a `tapReady` message for a macOS web view. Exports and Tap Desktop's thumbnails wait for it.

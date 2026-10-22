@@ -26,7 +26,10 @@ A markdown-based presentation tool for technical presentations with beautiful de
   microphone, with a chapter list of slide timings written beside the video.
   macOS only.
 - **`tap present`.** Give the talk without live reload, and record every
-  run automatically, following the projector across HDMI swaps.
+  run automatically, following the projector across HDMI swaps. With ffmpeg
+  installed, a finished run also gets a `talk.mp4` cut from the talk start
+  with YouTube loudness and a chapter list (`tap record finish` does the same
+  for an older recording).
 - **A fixed 1920px canvas** that scales as one unit, so a deck looks the
   same on every projector.
 - **Static builds and PDF export**, plus `tap export images` for checking a
