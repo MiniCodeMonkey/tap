@@ -40,18 +40,28 @@ final class RecordingSetupTests: HostedTestCase {
     }
 
     func testEveryStepStateFitsTheWelcomeWindow() async throws {
-        // A card too wide for its column grows the shared welcome window for every later test.
+        // A card too wide for its column grows the shared welcome window, and it stays grown for every later test.
         let item = try helpMenuItem()
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(item.action), to: nil, from: item))
         let window = try XCTUnwrap(welcome.window)
-        for action in [RecordingStepAction.allow, .openSettings, .waiting, .none] {
-            for (isDone, isCurrent) in [(false, true), (false, false), (true, false)] {
-                for card in [setup.microphoneCard, setup.screenCard] { card.update(isDone: isDone, isCurrent: isCurrent, action: action) }
-                window.layoutIfNeeded()
-                XCTAssertEqual(window.contentView?.frame.size, WelcomeRootView.windowSize, "\(action), done \(isDone), current \(isCurrent)")
+        func check(_ state: String) {
+            setup.refresh()
+            window.layoutIfNeeded()
+            XCTAssertEqual(window.contentView?.frame.size, WelcomeRootView.windowSize, state)
+        }
+        for microphone in [MicrophoneAccess.notDetermined, .denied, .allowed] {
+            for screenAllowed in [false, true] {
+                permissions.microphone = microphone
+                permissions.screenRecordingAllowed = screenAllowed
+                check("microphone \(microphone), screen \(screenAllowed)")
             }
         }
+        // Waiting in System Settings: the screen card shows its status and the guide.
+        permissions.microphone = .allowed
+        permissions.screenRecordingAllowed = false
         setup.refresh()
+        setup.screenCard.button.performClick(nil)
+        check("waiting for System Settings")
     }
 
     func testSetUpRecordingBeforeTheFirstTalk() async throws {
