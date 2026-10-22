@@ -249,7 +249,7 @@ final class RecordingStepCard: FlippedView {
         top.alignment = .centerY
         top.spacing = 14
 
-        let breadcrumb = setupLabel("Privacy & Security › Screen & System Audio Recording", size: 11, weight: .regular, color: WelcomeColor.text3, wrapWidth: 168)
+        let breadcrumb = setupLabel("Privacy & Security › Screen & System Audio Recording", size: 11, weight: .regular, color: WelcomeColor.text3, wrapWidth: 160)
         breadcrumb.font = .systemFont(ofSize: 11)
         let preview = NSStackView(views: [breadcrumb, settingsRow])
         preview.orientation = .vertical
@@ -264,6 +264,7 @@ final class RecordingStepCard: FlippedView {
         guide.orientation = .horizontal
         guide.distribution = .fillEqually
         guide.alignment = .centerY
+        // Two equal columns, each its widest wrap plus the preview's insets, fit the card's 392 points with room to spare.
         guide.spacing = 12
         guide.isHidden = true
 
@@ -303,7 +304,7 @@ final class RecordingStepCard: FlippedView {
         field.attributedStringValue = text
         field.isSelectable = false
         field.maximumNumberOfLines = 0
-        field.preferredMaxLayoutWidth = 184
+        field.preferredMaxLayoutWidth = 176
         return field
     }
 

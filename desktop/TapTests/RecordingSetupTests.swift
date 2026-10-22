@@ -39,6 +39,21 @@ final class RecordingSetupTests: HostedTestCase {
         try XCTUnwrap(NSApp.helpMenu?.items.first { $0.title == "Set Up Recording…" })
     }
 
+    func testEveryStepStateFitsTheWelcomeWindow() async throws {
+        // A card too wide for its column grows the shared welcome window for every later test.
+        let item = try helpMenuItem()
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(item.action), to: nil, from: item))
+        let window = try XCTUnwrap(welcome.window)
+        for action in [RecordingStepAction.allow, .openSettings, .waiting, .none] {
+            for (isDone, isCurrent) in [(false, true), (false, false), (true, false)] {
+                for card in [setup.microphoneCard, setup.screenCard] { card.update(isDone: isDone, isCurrent: isCurrent, action: action) }
+                window.layoutIfNeeded()
+                XCTAssertEqual(window.contentView?.frame.size, WelcomeRootView.windowSize, "\(action), done \(isDone), current \(isCurrent)")
+            }
+        }
+        setup.refresh()
+    }
+
     func testSetUpRecordingBeforeTheFirstTalk() async throws {
         // The Help menu opens the screen in the welcome window, in place of its layouts.
         let item = try helpMenuItem()
