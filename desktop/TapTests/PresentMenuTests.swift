@@ -185,6 +185,21 @@ final class PresentMenuTests: PresentingTestCase {
         try await waitUntil(timeout: 30, "the end") { presentation.state == .idle }
         try await waitUntil(timeout: 10, "nothing left in full screen") { fullScreenPresentationWindows().isEmpty && presentation.windowsGoingDown.isEmpty }
 
+        // The presenter page closes its shortcut overlay with Escape and keeps the talk; an Escape it has no use for ends the talk.
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let presenterPage = try XCTUnwrap(presentation.presenterWindow).page.webView
+        func pressInPage(_ key: String) async throws {
+            _ = try await presenterPage.evaluateJavaScript("window.dispatchEvent(new KeyboardEvent('keydown', {key: '\(key)', bubbles: true, cancelable: true})); true")
+        }
+        try await pressInPage("?")
+        try await pressInPage("Escape")
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertEqual(presentation.state, .presenting, "Escape closed the overlay")
+        try await pressInPage("Escape")
+        try await waitUntil(timeout: 5, "Escape the page let pass") { presentation.state != .presenting }
+        try await waitUntil(timeout: 30, "the end") { presentation.state == .idle }
+        try await waitUntil(timeout: 10, "nothing left in full screen") { fullScreenPresentationWindows().isEmpty && presentation.windowsGoingDown.isEmpty }
+
         // A rehearsal has no audience window: Escape in the presenter window stops it.
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
         let rehearsal = try XCTUnwrap(presentation.presenterWindow)

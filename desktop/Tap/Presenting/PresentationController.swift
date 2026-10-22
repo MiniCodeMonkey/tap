@@ -469,6 +469,7 @@ final class PresentationController {
         window.page.onLoadFailed = { [weak self] _ in self?.pageReported() }
         window.page.onPresenterPopup = { [weak self] in self?.bringPresenterWindowForward() }
         window.page.currentSlide = { [weak self] in self?.lastSlide }
+        window.page.onUnhandledEscape = { [weak self] in self?.stop() }
         window.onMouseMoved = { [weak self] in self?.noteMouseMoved() }
         if let toolbar = window.presenterToolbar {
             toolbar.onRecord = { [weak self] in self?.toggleRecording() }
@@ -639,7 +640,10 @@ final class PresentationController {
     // MARK: Keys
 
     /// Escape in the audience window ends the talk (in the presenter window
-    /// too, when there is no audience window: a rehearsal), and on one
+    /// too, when there is no audience window: a rehearsal). In the presenter
+    /// window beside an audience window Escape goes to the page first, which
+    /// uses it to close its menus and overlays, and ends the talk when the
+    /// page had no use for it (`onUnhandledEscape`). On one
     /// display Option-Tab switches to the other window's Space. Every
     /// other key goes to tap's page unchanged, and so does Option-Tab when
     /// each window has a display of its own. Internal so a test can drive
@@ -1125,6 +1129,8 @@ extension ScreenInfo {
     init(screen: NSScreen) {
         let number = screen.deviceDescription[NSDeviceDescriptionKey(rawValue: "NSScreenNumber")] as? NSNumber
         let displayID = CGDirectDisplayID(number?.uint32Value ?? 0)
-        self.init(name: screen.localizedName, frame: screen.frame, isBuiltIn: CGDisplayIsBuiltin(displayID) != 0)
+        // Some projectors and adapters report no name; the role menu shows its name as its title.
+        let name = screen.localizedName.trimmingCharacters(in: .whitespaces)
+        self.init(name: name.isEmpty ? "External Display" : name, frame: screen.frame, isBuiltIn: CGDisplayIsBuiltin(displayID) != 0)
     }
 }

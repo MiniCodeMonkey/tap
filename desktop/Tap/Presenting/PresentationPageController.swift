@@ -14,6 +14,9 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     let webView: WKWebView
     var onReady: ((ReadyPayload) -> Void)?
     var onLoadFailed: ((Error) -> Void)?
+    /// Escape reached the page and nothing on it used the key: no menu or
+    /// overlay closed and no field had focus.
+    var onUnhandledEscape: (() -> Void)?
     /// The page asked for a window at /presenter: the S key.
     var onPresenterPopup: (() -> Void)?
     /// The talk's current slide (1-based), which a page reloaded after its
@@ -56,12 +59,28 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init(nibName: nil, bundle: nil)
         configuration.userContentController.add(WeakScriptMessageHandler(self), name: "tapReady")
+        configuration.userContentController.add(WeakScriptMessageHandler(self), name: "tapEscape")
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.unhandledEscapeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.setAccessibilityIdentifier(accessibilityIdentifier)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// Reports an Escape the page let pass. The check waits until every
+    /// handler has seen the key, since the page's own handlers call
+    /// preventDefault on an Escape they use. A held key's repeats are left alone.
+    static let unhandledEscapeScript = """
+    window.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape' || event.repeat) return;
+        setTimeout(function () {
+            var focused = document.activeElement;
+            var editing = focused && (focused.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName));
+            if (!event.defaultPrevented && !editing) window.webkit.messageHandlers.tapEscape.postMessage(null);
+        }, 0);
+    }, true);
+    """
 
     override func loadView() {
         view = webView
@@ -184,6 +203,10 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "tapEscape" {
+            onUnhandledEscape?()
+            return
+        }
         guard message.name == "tapReady", let body = message.body as? [String: Any],
               let slide = (body["slide"] as? NSNumber)?.intValue else { return }
         pageReportedReady(ReadyPayload(revision: body["revision"] as? String ?? "",
