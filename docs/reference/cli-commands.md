@@ -278,6 +278,42 @@ tap present slides.md --no-record  # Skip recording for this run
 tap present slides.md --lan        # Let a phone on the same network connect
 ```
 
+When a kept recording ends, `tap present` also starts `tap record finish` on its folder in the background. See [Finishing a recording](/guide/presenting#finishing-a-recording).
+
+---
+
+## tap record finish
+
+Join a recording's segments and cut an upload-ready video from it. Needs [ffmpeg](https://ffmpeg.org), which `tap present` also needs to do this by itself.
+
+### Usage
+
+```bash
+tap record finish <folder>
+```
+
+`<folder>` is a recording folder made by `tap present`, with numbered segments (`01.mov`, `02.mov`, ...) and usually a `chapters.txt`.
+
+### Output
+
+Written next to the segments. Nothing is deleted and `chapters.txt` is not changed.
+
+| File | What it is |
+|------|------------|
+| `talk.mov` | All segments joined without re-encoding. Not written when there is one segment |
+| `talk.mp4` | The talk from the `Talk starts` mark (or the start), video copied, audio normalized to -14 LUFS and -1 dBTP |
+| `talk-chapters.txt` | A YouTube chapter list timed to `talk.mp4`. Not written when there is no `chapters.txt` |
+
+The video is not re-encoded, so `talk.mp4` begins on the last keyframe at or before the mark, and the chapter times account for that.
+
+Without ffmpeg, the command exits 1 and prints `brew install ffmpeg` and the command to run again.
+
+### Examples
+
+```bash
+tap record finish recordings/my-talk-2026-09-21-1932
+```
+
 ---
 
 ## tap build
@@ -1176,6 +1212,7 @@ Every later line is an event:
 | `file-changed` | a file in the deck folder changed that tap did not write (`tap dev` only) | `path`, and for a file other than the deck, `slides` and `errors` as `tap slide list --json` prints them |
 | `question` | tap needs an answer | `id`, `kind` (`approval`, `record-consent`, `keep-recording`), `payload` |
 | `recording` | the recording state changes (`tap present` only) | `state` (`recording`, `paused`, `stopped`), `segment`, `elapsed` (seconds), `disk` (`ok`, `low`, `full`) |
+| `recording-export` | a kept recording was handed to `tap record finish` (`tap present` only) | `state` (`started`, `unavailable` when ffmpeg is missing, `failed`), `directory`, `log` (the file the export writes to, when started), `message` |
 | `tunnel` | the tunnel state changes | `state` (`starting`, `running`, `stopped`), `url`, `qr` (a PNG of the presenter view's URL, base64) |
 | `slide` | the audience position changes (`tap present` only) | `slide` (from 1), `step` |
 | `error` | a fatal or reportable error | `code`, `message` |
