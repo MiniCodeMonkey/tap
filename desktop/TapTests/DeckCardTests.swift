@@ -399,13 +399,15 @@ final class DeckCardTests: HostedTestCase {
         controller.editor.layoutSubtreeIfNeeded()
         let editorScroll = try XCTUnwrap(controller.editor.enclosingScrollView)
         XCTAssertGreaterThan(controller.editor.frame.height, editorScroll.contentView.bounds.height, "the editor has somewhere to scroll")
-        XCTAssertEqual(editorScroll.contentView.bounds.minY, 0, accuracy: 0.5)
+        // At rest the text sits below the toolbar's inset.
+        let top = -editorScroll.contentInsets.top
+        XCTAssertEqual(editorScroll.contentView.bounds.minY, top, accuracy: 0.5)
 
         let cgEvent = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -120, wheel2: 0, wheel3: 0))
         let event = try XCTUnwrap(NSEvent(cgEvent: cgEvent))
         form.scrollView.scrollWheel(with: event)
 
-        try await waitUntil(timeout: 5, "the editor scrolls") { editorScroll.contentView.bounds.minY > 0 }
+        try await waitUntil(timeout: 5, "the editor scrolls") { editorScroll.contentView.bounds.minY > top + 0.5 }
     }
 
     func testDeckSettingsFromTheViewMenu() async throws {

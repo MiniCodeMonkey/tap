@@ -109,6 +109,8 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
 
     static let contentWidth: CGFloat = 328
 
+    /// The popover's size, for a test.
+    var contentSize: NSSize { popover.contentSize }
     /// Kept here rather than read from the popover, whose `isShown` can
     /// depend on whether the app is active (D3's gallery found the same).
     private(set) var isShown = false
@@ -360,6 +362,11 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         startFromPopUp.selectItem(at: previousChoice == 1 ? 1 : 0)
         startFromLabel.isHidden = cursor <= 1
         startFromPopUp.isHidden = cursor <= 1
+        // The popover grows to fit rows that show but keeps its height when they hide again.
+        if let content = popover.contentViewController?.view {
+            content.layoutSubtreeIfNeeded()
+            popover.contentSize = content.fittingSize
+        }
     }
 
     private func observeDisplays() {
@@ -439,6 +446,8 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     }
 
     @objc private func phoneRemoteChanged(_ sender: Any?) {
+        // Looked up again: cloudflared may have been installed while the popover was up.
+        cloudflaredInstalled = AppEnvironment.shared.isCloudflaredInstalled()
         refresh()
     }
 

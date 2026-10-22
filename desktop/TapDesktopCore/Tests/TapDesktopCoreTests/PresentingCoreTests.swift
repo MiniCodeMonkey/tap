@@ -154,7 +154,7 @@ final class PresentingCoreTests: XCTestCase {
     }
 
     func testOptionsBecomeTheTapPresentCommand() {
-        let play = PresentationOptions(mode: .play, startSlide: 3)
+        let play = PresentationOptions(mode: .play, startSlide: 3, record: true)
         XCTAssertEqual(play.command(port: nil), .present(record: true, presenterPassword: nil, port: nil))
         XCTAssertEqual(play.command(port: 4242), .present(record: true, presenterPassword: nil, port: 4242), "the deck's remembered port travels with the command")
         XCTAssertFalse(play.wantsTunnel)
