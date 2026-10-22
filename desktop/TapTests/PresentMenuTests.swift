@@ -192,6 +192,12 @@ final class PresentMenuTests: PresentingTestCase {
             _ = try await presenterPage.evaluateJavaScript("window.dispatchEvent(new KeyboardEvent('keydown', {key: '\(key)', bubbles: true, cancelable: true})); true")
         }
         try await pressInPage("?")
+        var overlayShown = false
+        for _ in 0..<50 where !overlayShown {
+            overlayShown = try await presenterPage.evaluateJavaScript("document.querySelector('.shortcut-help') !== null") as? Bool == true
+            if !overlayShown { try await Task.sleep(for: .milliseconds(100)) }
+        }
+        XCTAssertTrue(overlayShown, "the shortcut overlay")
         try await pressInPage("Escape")
         try await Task.sleep(for: .milliseconds(500))
         XCTAssertEqual(presentation.state, .presenting, "Escape closed the overlay")
