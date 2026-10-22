@@ -82,7 +82,7 @@ func TestTalkChaptersWithoutAMarkStartAtTheBeginning(t *testing.T) {
 }
 
 func TestEncodeArgsCopyVideoAndNormalizeAudioLinearly(t *testing.T) {
-	measured := &loudness{Integrated: "-31.2", TruePeak: "-9.0", Range: "6.1", Threshold: "-41.5", Offset: "0.3"}
+	measured := &loudness{Integrated: -31.2, TruePeak: -9, Range: 6.1, Threshold: -41.5, Offset: 0.3}
 
 	got := strings.Join(encodeArgs("talk.mov", 708*time.Second, "talk.mp4", measured), " ")
 
@@ -105,8 +105,30 @@ func TestParseLoudnessFindsTheJSONBlockAmongLogLines(t *testing.T) {
 
 	measured, err := parseLoudness(report)
 
-	if err != nil || measured.Integrated != "-31.04" || measured.Offset != "0.12" {
+	if err != nil || measured.Integrated != -31.04 || measured.Offset != 0.12 {
 		t.Errorf("parseLoudness = %+v, %v", measured, err)
+	}
+}
+
+func TestParseLoudnessRefusesAValueThatIsNotANumber(t *testing.T) {
+	report := "{\"input_i\" : \"-31.04:measured_I=1,afftdn\", \"input_tp\" : \"-9.60\", " +
+		"\"input_lra\" : \"7.20\", \"input_thresh\" : \"-41.30\", \"target_offset\" : \"0.12\"}"
+
+	if _, err := parseLoudness(report); err == nil || !strings.Contains(err.Error(), "input_i") {
+		t.Errorf("parseLoudness error = %v, want a refusal naming input_i", err)
+	}
+}
+
+func TestParseLoudnessAcceptsInfinityAndUsesTheLastBlock(t *testing.T) {
+	block := func(value string) string {
+		return "{\"input_i\" : \"" + value + "\", \"input_tp\" : \"-9\", \"input_lra\" : \"7\", " +
+			"\"input_thresh\" : \"-70.00\", \"target_offset\" : \"0\"}\n"
+	}
+
+	measured, err := parseLoudness(block("-20") + block("-inf"))
+
+	if err != nil || filterNumber(measured.Integrated) != "-inf" {
+		t.Errorf("parseLoudness = %+v, %v, want the last block's -inf", measured, err)
 	}
 }
 

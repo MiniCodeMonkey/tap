@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,11 +60,33 @@ func FFmpegAvailable() bool {
 
 // loudness is the first loudnorm pass's measurement of a clip.
 type loudness struct {
+	Integrated float64
+	TruePeak   float64
+	Range      float64
+	Threshold  float64
+	Offset     float64
+}
+
+// loudnessReport is the JSON block as ffmpeg prints it, with every value
+// as text.
+type loudnessReport struct {
 	Integrated string `json:"input_i"`
 	TruePeak   string `json:"input_tp"`
 	Range      string `json:"input_lra"`
 	Threshold  string `json:"input_thresh"`
 	Offset     string `json:"target_offset"`
+}
+
+// filterNumber writes a measured value into a filter. It comes from a
+// parsed float, never from the text ffmpeg printed.
+func filterNumber(value float64) string {
+	switch {
+	case math.IsInf(value, 1):
+		return "inf"
+	case math.IsInf(value, -1):
+		return "-inf"
+	}
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
 // concatArgs joins the segments listed in listPath without re-encoding.
@@ -74,7 +97,7 @@ func concatArgs(listPath, output string) []string {
 
 // measureArgs is the loudnorm analysis pass over the audio from start on.
 func measureArgs(input string, start time.Duration) []string {
-	return []string{"-hide_banner", "-nostats", "-y",
+	return []string{"-hide_banner", "-nostats", "-loglevel", "info", "-y",
 		"-ss", seconds(start), "-i", input, "-vn",
 		"-af", "loudnorm=I=" + targetLoudness + ":TP=" + targetPeak + ":LRA=11:print_format=json",
 		"-f", "null", "-"}
@@ -92,11 +115,11 @@ func encodeArgs(input string, start time.Duration, output string, measured *loud
 		arguments = append(arguments, "-an")
 	} else {
 		filter := "loudnorm=I=" + targetLoudness + ":TP=" + targetPeak + ":LRA=11" +
-			":measured_I=" + measured.Integrated +
-			":measured_TP=" + measured.TruePeak +
-			":measured_LRA=" + measured.Range +
-			":measured_thresh=" + measured.Threshold +
-			":offset=" + measured.Offset + ":linear=true"
+			":measured_I=" + filterNumber(measured.Integrated) +
+			":measured_TP=" + filterNumber(measured.TruePeak) +
+			":measured_LRA=" + filterNumber(measured.Range) +
+			":measured_thresh=" + filterNumber(measured.Threshold) +
+			":offset=" + filterNumber(measured.Offset) + ":linear=true"
 		arguments = append(arguments, "-map", "0:a:0", "-af", filter,
 			"-c:a", "aac", "-b:a", "192k", "-ar", "48000")
 	}
@@ -317,13 +340,32 @@ func runFFmpeg(report, log io.Writer, arguments []string) error {
 
 var loudnessBlock = regexp.MustCompile(`(?s)\{[^{}]*"input_i"[^{}]*\}`)
 
-// parseLoudness reads the JSON block loudnorm prints at the end of its
-// analysis pass.
+// parseLoudness reads the last JSON block loudnorm printed in its analysis
+// pass. Every value must be a number (or an infinity), because the values
+// go into the second pass's filter.
 func parseLoudness(report string) (*loudness, error) {
-	block := loudnessBlock.FindString(report)
-	var measured loudness
-	if block == "" || json.Unmarshal([]byte(block), &measured) != nil {
+	blocks := loudnessBlock.FindAllString(report, -1)
+	var raw loudnessReport
+	if len(blocks) == 0 || json.Unmarshal([]byte(blocks[len(blocks)-1]), &raw) != nil {
 		return nil, errors.New("ffmpeg did not report the loudness")
+	}
+	var measured loudness
+	for _, field := range []struct {
+		name string
+		text string
+		into *float64
+	}{
+		{"input_i", raw.Integrated, &measured.Integrated},
+		{"input_tp", raw.TruePeak, &measured.TruePeak},
+		{"input_lra", raw.Range, &measured.Range},
+		{"input_thresh", raw.Threshold, &measured.Threshold},
+		{"target_offset", raw.Offset, &measured.Offset},
+	} {
+		value, err := strconv.ParseFloat(strings.TrimSpace(field.text), 64)
+		if err != nil || math.IsNaN(value) {
+			return nil, fmt.Errorf("ffmpeg reported %q for %s, which is not a number", field.text, field.name)
+		}
+		*field.into = value
 	}
 	return &measured, nil
 }
