@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **The presenter timer waits for the talk to start** - It holds at 0:00 until you first leave the first slide, or until you press R or click it. Turn it off with `tap settings set present.startTimerOnFirstAdvance false`, or in the desktop app under Settings > General > Presenting.
+- **`tap settings get` and `tap settings set`** - Read and change your settings in `~/.config/tap/settings.yaml`.
+
 ## [2.0.0-rc.2] - 2026-10-21
 
 ### Added

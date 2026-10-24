@@ -213,10 +213,30 @@ export default function PresenterApp() {
 		? Math.max(NOTES_FIT_MIN_SIZE, fittedNotesFontSize * notesFitScale)
 		: notesFontSize;
 
-	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	// The timer holds at 0:00 until the talk starts: the first move off the
+	// first slide, or R or a click on the timer. With the speaker's
+	// startTimerOnFirstAdvance setting off, it starts once the deck loads.
+	// Once started it never stops, so going back to slide 1 keeps counting.
+	const [timerStarted, setTimerStarted] = useState(false);
+	const startTimerOnFirstAdvance = presentation?.startTimerOnFirstAdvance ?? true;
+
+	useEffect(() => {
+		if (presentation && (!startTimerOnFirstAdvance || currentSlideIndex > 0)) {
+			setTimerStarted(true);
+		}
+	}, [presentation, startTimerOnFirstAdvance, currentSlideIndex]);
+
+	useEffect(() => {
+		if (!timerStarted) return;
+		const interval = setInterval(() => {
+			setElapsedSeconds((seconds) => seconds + 1);
+		}, 1000);
+		return () => clearInterval(interval);
+	}, [timerStarted]);
 
 	function resetTimer(): void {
 		setElapsedSeconds(0);
+		setTimerStarted(true);
 	}
 
 	function handleNextSlide(): void {
@@ -280,10 +300,6 @@ export default function PresenterApp() {
 				}
 			});
 		}
-
-		timerRef.current = setInterval(() => {
-			setElapsedSeconds((seconds) => seconds + 1);
-		}, 1000);
 
 		function handleKeyDown(event: KeyboardEvent): void {
 			if (isInputFocused()) return;
@@ -382,10 +398,6 @@ export default function PresenterApp() {
 			cancelled = true;
 			hashCleanup();
 			disconnectWebSocket();
-			if (timerRef.current) {
-				clearInterval(timerRef.current);
-				timerRef.current = null;
-			}
 			wakeLock.release();
 			window.removeEventListener('keydown', handleKeyDown);
 		};
@@ -457,8 +469,8 @@ export default function PresenterApp() {
 					<button
 						className="presenter-timer"
 						onClick={resetTimer}
-						title="Click to reset timer"
-						aria-label={`Elapsed time: ${formatTime(elapsedSeconds)}. Click to reset.`}
+						title={timerStarted ? 'Click to reset timer' : 'Click to start timer'}
+						aria-label={`Elapsed time: ${formatTime(elapsedSeconds)}. Click to ${timerStarted ? 'reset' : 'start'}.`}
 					>
 						{formatTime(elapsedSeconds)}
 					</button>

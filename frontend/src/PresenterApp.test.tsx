@@ -290,6 +290,54 @@ describe('PresenterApp', () => {
 		expect(container.querySelector('.shortcut-help')).not.toBeInTheDocument();
 	});
 
+	describe('timer', () => {
+		beforeEach(() => {
+			// The slide in the hash survives from an earlier test, and a
+			// deck that loads past slide 1 starts the timer at once.
+			window.history.replaceState(null, '', '/presenter');
+			vi.useFakeTimers({ shouldAdvanceTime: true });
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		async function renderLoaded(presentation: Presentation): Promise<Element> {
+			vi.mocked(fetch).mockImplementation(() =>
+				Promise.resolve({ ok: true, statusText: 'OK', json: () => Promise.resolve(presentation) } as Response)
+			);
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => {
+				expect(container.querySelector('.presenter-view')).toBeInTheDocument();
+			});
+			return container.querySelector('.presenter-timer')!;
+		}
+
+		it('holds at 0:00 until the speaker leaves the first slide', async () => {
+			const timer = await renderLoaded(samplePresentation);
+			act(() => vi.advanceTimersByTime(3000));
+			expect(timer).toHaveTextContent('0:00');
+			expect(timer).toHaveAttribute('title', 'Click to start timer');
+
+			fireEvent.keyDown(window, { key: 'ArrowRight' });
+			act(() => vi.advanceTimersByTime(3000));
+			expect(timer).toHaveTextContent('0:03');
+		});
+
+		it('starts on R while still on the first slide', async () => {
+			const timer = await renderLoaded(samplePresentation);
+			fireEvent.keyDown(window, { key: 'r' });
+			act(() => vi.advanceTimersByTime(2000));
+			expect(timer).toHaveTextContent('0:02');
+		});
+
+		it('starts on load when the speaker turned the setting off', async () => {
+			const timer = await renderLoaded({ ...samplePresentation, startTimerOnFirstAdvance: false });
+			act(() => vi.advanceTimersByTime(2000));
+			expect(timer).toHaveTextContent('0:02');
+		});
+	});
+
 	describe('speaker notes font size', () => {
 		const storageKey = 'tap-presenter-notes-font-size';
 

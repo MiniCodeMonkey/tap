@@ -14,6 +14,7 @@ import (
 
 	"github.com/MiniCodeMonkey/tap/embedded"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 )
 
 // SetupRoutes configures all HTTP routes on the server.
@@ -200,6 +201,24 @@ type presentationResponse struct {
 	// Revision is the deck's revision, which the page reports in its
 	// ready signal.
 	Revision string `json:"revision"`
+	// StartTimerOnFirstAdvance is the speaker's settings.yaml choice for
+	// the presenter view's timer, read on every request so a change from
+	// the desktop app or tap settings reaches the next page load.
+	StartTimerOnFirstAdvance bool `json:"startTimerOnFirstAdvance"`
+}
+
+// timerStartsOnFirstAdvance reads the speaker's timer setting. A missing
+// or unreadable settings file means the default, on.
+func timerStartsOnFirstAdvance() bool {
+	path, err := usersettings.Path()
+	if err != nil {
+		return true
+	}
+	settings, err := usersettings.Load(path)
+	if err != nil {
+		return true
+	}
+	return settings.Present.TimerStartsOnFirstAdvance()
 }
 
 // liveCodeStatus tells the page which live code blocks can run. A block
@@ -247,9 +266,10 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(presentationResponse{
-		PublicPresentation: pres.Public(),
-		LiveCode:           s.liveCodeStatusFor(pres),
-		Revision:           s.Revision(),
+		PublicPresentation:       pres.Public(),
+		LiveCode:                 s.liveCodeStatusFor(pres),
+		Revision:                 s.Revision(),
+		StartTimerOnFirstAdvance: timerStartsOnFirstAdvance(),
 	}); err != nil {
 		// If encoding fails, we've already started writing the response
 		// so we can't change the status code. Just log internally.

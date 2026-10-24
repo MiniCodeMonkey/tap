@@ -940,3 +940,26 @@ func TestEnsureApprovalKeyUnderTheLockReplacesAShortKeyOnce(t *testing.T) {
 		})
 	}
 }
+
+func TestTimerStartsOnFirstAdvanceDefaultsOnAndKeepsAnOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	settings, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !settings.Present.TimerStartsOnFirstAdvance() {
+		t.Fatal("a missing setting is off, want on")
+	}
+	off := false
+	settings.Present.StartTimerOnFirstAdvance = &off
+	if err := Save(path, settings); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Present.TimerStartsOnFirstAdvance() {
+		t.Fatal("a saved false reads back on")
+	}
+}

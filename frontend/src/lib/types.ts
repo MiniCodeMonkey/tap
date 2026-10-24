@@ -287,6 +287,12 @@ export interface Presentation {
 	 * build.
 	 */
 	revision?: string;
+	/**
+	 * The speaker's settings.yaml choice to hold the presenter timer at 0:00
+	 * until they leave the first slide. Absent in a static build, which
+	 * means on, the default.
+	 */
+	startTimerOnFirstAdvance?: boolean;
 }
 
 // ============================================================================

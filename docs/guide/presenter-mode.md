@@ -144,10 +144,20 @@ session without saving it.
 
 ### Timer
 
-The presenter view includes a timer that starts when you begin presenting:
+The presenter view includes a timer:
 
 - **Elapsed time** - How long you've been presenting
 - **Current time** - The current wall clock time
+
+The elapsed time holds at 0:00 until you first leave the first slide, so a deck you open well before the talk does not count the wait. Press **R** or click the timer to start it sooner, for an intro you give over the title slide. Once started, it keeps counting, even if you go back to the first slide.
+
+To start the timer as soon as the presenter view opens, turn the setting off:
+
+```bash
+tap settings set present.startTimerOnFirstAdvance false
+```
+
+The setting lives in `~/.config/tap/settings.yaml`, which `tap dev`, `tap present` and the Tap desktop app share. In the app, it is **Settings > General > Presenting**.
 
 ::: tip Reset Timer
 Press **R** in presenter view to reset the timer to zero.

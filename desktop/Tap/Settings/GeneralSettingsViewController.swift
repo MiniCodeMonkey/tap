@@ -2,7 +2,10 @@ import AppKit
 
 /// General: the editor's font size and line spacing, the theme New Deck
 /// preselects, the autosave delay, and Sparkle's automatic checks, in
-/// GeneralSettings. Each group ("Editor", "New decks", "Saving", "Updates")
+/// GeneralSettings; and when the presenter timer starts, which is tap's
+/// settings.yaml key, read and written with tap settings so tap present in
+/// Terminal follows it too. Each group ("Editor", "New decks", "Saving",
+/// "Presenting", "Updates")
 /// is a heading over a FormCard, the Deck tab's own card: its rows are
 /// pinned by constraints, not held in an NSBox's contentView, so a card is
 /// exactly as tall as its rows.
@@ -15,6 +18,8 @@ final class GeneralSettingsViewController: NSViewController {
     /// prompt already explains it once, and this is only where the answer
     /// is changed later.
     let automaticUpdatesCheckbox = NSButton(checkboxWithTitle: "Check for updates automatically", target: nil, action: nil)
+    let timerCheckbox = NSButton(checkboxWithTitle: "Start the timer when you leave the first slide", target: nil, action: nil)
+    static let timerSettingKey = "present.startTimerOnFirstAdvance"
     static let noDefaultTheme = "tap's default"
     private var catalogObserver: NSObjectProtocol?
 
@@ -51,6 +56,10 @@ final class GeneralSettingsViewController: NSViewController {
         automaticUpdatesCheckbox.target = self
         automaticUpdatesCheckbox.action = #selector(changed(_:))
         automaticUpdatesCheckbox.setAccessibilityIdentifier("settings-automatic-updates")
+        timerCheckbox.target = self
+        timerCheckbox.action = #selector(timerChanged(_:))
+        timerCheckbox.state = .on
+        timerCheckbox.setAccessibilityIdentifier("settings-timer-first-advance")
 
         let editorCard = FormCard(rows: [
             Self.row(label: "Font size", control: fontSizePopup),
@@ -62,12 +71,23 @@ final class GeneralSettingsViewController: NSViewController {
         let savingCard = FormCard(rows: [
             Self.row(label: "Autosave after typing stops", control: autosavePopup),
         ])
+        let timerHint = NSTextField(wrappingLabelWithString: "Until then it shows 0:00. Press R or click the timer to start it sooner. Also applies to tap present in Terminal.")
+        timerHint.font = .systemFont(ofSize: 11)
+        timerHint.textColor = .secondaryLabelColor
+        let timerLabels = NSStackView(views: [timerCheckbox, timerHint])
+        timerLabels.orientation = .vertical
+        timerLabels.alignment = .leading
+        timerLabels.spacing = 2
+        let presentingCard = FormCard(rows: [
+            FormCard.row(leading: [timerLabels], trailing: []),
+        ])
         let updatesCard = FormCard(rows: [
             FormCard.row(leading: [automaticUpdatesCheckbox], trailing: []),
         ])
         editorCard.setAccessibilityIdentifier("settings-card-Editor")
         decksCard.setAccessibilityIdentifier("settings-card-New decks")
         savingCard.setAccessibilityIdentifier("settings-card-Saving")
+        presentingCard.setAccessibilityIdentifier("settings-card-Presenting")
         updatesCard.setAccessibilityIdentifier("settings-card-Updates")
 
         // A section per group, in order; another card is one more entry
@@ -76,6 +96,7 @@ final class GeneralSettingsViewController: NSViewController {
             FormCard.section(title: "Editor", content: [editorCard]),
             FormCard.section(title: "New decks", content: [decksCard]),
             FormCard.section(title: "Saving", content: [savingCard]),
+            FormCard.section(title: "Presenting", content: [presentingCard]),
             FormCard.section(title: "Updates", content: [updatesCard]),
         ]
         let stack = NSStackView(views: sections)
@@ -94,6 +115,30 @@ final class GeneralSettingsViewController: NSViewController {
         // (and the export engine's download) wait for a grid that shows them.
         AppEnvironment.shared.themeImages.loadCatalog()
         refresh()
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        reloadTimerSetting()
+    }
+
+    /// tap settings get, so a change made in Terminal shows here.
+    func reloadTimerSetting() {
+        Task { @MainActor [weak self] in
+            let exit = await TapTool.run(["settings", "get", Self.timerSettingKey, "--json"], timeout: 30)
+            guard let self, let setting = try? exit.outcome?.result(SettingValue.self) else { return }
+            self.timerCheckbox.state = setting.value ? .on : .off
+        }
+    }
+
+    /// tap settings set, then the value tap reports, so a failed write
+    /// puts the checkbox back.
+    @objc func timerChanged(_ sender: NSButton) {
+        let value = sender.state == .on
+        Task { @MainActor [weak self] in
+            _ = await TapTool.run(["settings", "set", Self.timerSettingKey, String(value), "--json"], timeout: 30)
+            self?.reloadTimerSetting()
+        }
     }
 
     deinit {

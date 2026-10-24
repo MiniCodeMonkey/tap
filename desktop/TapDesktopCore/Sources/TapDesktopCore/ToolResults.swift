@@ -110,3 +110,11 @@ public struct ApprovalList: Decodable, Equatable, Sendable {
     public let approvals: [ApprovalRecord]
     public init(approvals: [ApprovalRecord]) { self.approvals = approvals }
 }
+
+/// tap settings get --json and tap settings set --json: one boolean key
+/// of ~/.config/tap/settings.yaml, the file the CLI and the app share.
+public struct SettingValue: Decodable, Equatable, Sendable {
+    public let key: String
+    public let value: Bool
+    public init(key: String, value: Bool) { self.key = key; self.value = value }
+}

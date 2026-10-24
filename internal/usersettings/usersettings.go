@@ -58,9 +58,18 @@ type Driver struct {
 }
 
 // Present holds tap present settings. A nil Record means the speaker has
-// not been asked yet.
+// not been asked yet. StartTimerOnFirstAdvance holds the presenter view's
+// timer at 0:00 until the speaker first leaves the first slide; nil means
+// on (see TimerStartsOnFirstAdvance).
 type Present struct {
-	Record *bool `yaml:"record,omitempty"`
+	Record                   *bool `yaml:"record,omitempty"`
+	StartTimerOnFirstAdvance *bool `yaml:"startTimerOnFirstAdvance,omitempty"`
+}
+
+// TimerStartsOnFirstAdvance reports StartTimerOnFirstAdvance, which is on
+// unless the speaker turned it off.
+func (present Present) TimerStartsOnFirstAdvance() bool {
+	return present.StartTimerOnFirstAdvance == nil || *present.StartTimerOnFirstAdvance
 }
 
 // Path is settings.yaml in the Tap user config directory:
