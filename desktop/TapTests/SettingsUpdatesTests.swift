@@ -33,7 +33,7 @@ final class SettingsUpdatesTests: HostedTestCase {
         SettingsWindowController.shared.window?.orderOut(nil)
     }
 
-    /// The Updates card is the last card, directly under Saving, with no
+    /// The Updates card is the last card, directly under Presenting, with no
     /// row label or hint: the checkbox is the row's only view.
     func testTheUpdatesCardIsLastAndItsRowHoldsOnlyTheCheckbox() throws {
         let general = GeneralSettingsViewController()

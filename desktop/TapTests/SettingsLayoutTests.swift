@@ -16,12 +16,13 @@ final class SettingsLayoutTests: HostedTestCase {
         content.layoutSubtreeIfNeeded()
 
         let cards = general.cards
-        XCTAssertEqual(cards.count, 4, "Editor, New decks, Saving, Updates")
+        XCTAssertEqual(cards.count, 5, "Editor, New decks, Saving, Presenting, Updates")
         assertRowsDoNotOverlap([
             [general.fontSizePopup],
             [general.lineSpacingControl],
             [general.defaultThemePopup],
             [general.autosavePopup],
+            [general.timerCheckbox],
             [general.automaticUpdatesCheckbox],
         ], in: content)
         for card in cards {
