@@ -321,6 +321,13 @@ func (session *appSession) handle(command appCommand) {
 	case appCommandRecording:
 		action := command.Action
 		session.enqueue(func() { session.recording(action) })
+	case appCommandAudienceDisplay:
+		// The app sends this on every screen change of a talk, including
+		// runs without a recorder, so those ignore it.
+		if present := session.options.Present; present != nil {
+			name := command.Name
+			session.enqueue(func() { present.SetAudienceDisplay(name) })
+		}
 	default:
 		session.fail(appErrorUnknownCommand, fmt.Sprintf("unknown command %q", command.Type))
 	}

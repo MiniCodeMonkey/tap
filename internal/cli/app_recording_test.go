@@ -16,15 +16,16 @@ type fakePresent struct {
 	// finishBlock, when set, holds Finish until it closes. It is not
 	// taken under mu: a run whose Finish is slow does not lock out the
 	// rest of the interface.
-	finishBlock    chan struct{}
-	toggleErr      error
-	dir            string
-	state          tui.PresentRecordingState
-	segment        int
-	started        bool
-	leftFirstSlide bool
-	finished       bool
-	kept           bool
+	finishBlock     chan struct{}
+	toggleErr       error
+	dir             string
+	state           tui.PresentRecordingState
+	segment         int
+	started         bool
+	leftFirstSlide  bool
+	finished        bool
+	audienceDisplay string
+	kept            bool
 }
 
 var _ appPresentControl = (*fakePresent)(nil)
@@ -33,6 +34,12 @@ func (present *fakePresent) State() tui.PresentRecordingState {
 	present.mu.Lock()
 	defer present.mu.Unlock()
 	return present.state
+}
+
+func (present *fakePresent) SetAudienceDisplay(name string) {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	present.audienceDisplay = name
 }
 
 func (present *fakePresent) Elapsed() time.Duration { return 3 * time.Second }

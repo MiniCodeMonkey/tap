@@ -25,6 +25,7 @@ type appPresentControl interface {
 	Blocked() string
 	Segment() int
 	Dir() string
+	SetAudienceDisplay(name string)
 	Finish(keep bool) (recorder.RunSummary, error)
 }
 

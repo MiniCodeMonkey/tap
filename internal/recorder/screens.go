@@ -70,12 +70,15 @@ func parseScreens(raw []byte) []Screen {
 	return screens
 }
 
-// ChooseDisplay is the display a recording should capture: the first
-// external screen screencapture can address, or the built-in screen when
-// there is none. externalConnected reports whether any external screen is
+// ChooseDisplay is the display a recording should capture: the external
+// screen named preferred when screencapture can address it, otherwise the
+// first external screen it can address, or the built-in screen when there
+// is none. A preferred name that matches no addressable external screen
+// (unknown, mirrored, built-in, or spelled differently by the app and the
+// system) falls back to the first-external rule. externalConnected reports whether any external screen is
 // connected at all, mirrored or not, because a mirrored projector still
 // means the talk is on a projector.
-func ChooseDisplay(screens []Screen) (display int, externalConnected bool) {
+func ChooseDisplay(screens []Screen, preferred string) (display int, externalConnected bool) {
 	for _, screen := range screens {
 		if screen.BuiltIn {
 			continue
@@ -83,6 +86,9 @@ func ChooseDisplay(screens []Screen) (display int, externalConnected bool) {
 		externalConnected = true
 		if display == 0 && screen.Index > 0 {
 			display = screen.Index
+		}
+		if preferred != "" && screen.Name == preferred && screen.Index > 0 {
+			return screen.Index, true
 		}
 	}
 	if display == 0 {

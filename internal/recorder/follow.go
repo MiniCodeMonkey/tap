@@ -13,6 +13,10 @@ type FollowDecision struct {
 // someone else's talk and the presenter notes. A run that never sees an
 // external screen records the laptop throughout.
 type Follower struct {
+	// Prefer is the name of the screen the audience sees, as the app
+	// reports it. It picks between several external screens; ChooseDisplay
+	// ignores it when it matches none.
+	Prefer       string
 	current      FollowDecision
 	decided      bool
 	externalSeen bool
@@ -22,7 +26,7 @@ type Follower struct {
 // decision differs from the previous one. The first call always reports a
 // change.
 func (f *Follower) Decide(screens []Screen) (FollowDecision, bool) {
-	display, external := ChooseDisplay(screens)
+	display, external := ChooseDisplay(screens, f.Prefer)
 	if external {
 		f.externalSeen = true
 	}

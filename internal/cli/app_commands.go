@@ -11,13 +11,14 @@ import (
 
 // Command types on standard input in --app mode.
 const (
-	appCommandAnswer    = "answer"
-	appCommandSaved     = "saved"
-	appCommandSaving    = "saving"
-	appCommandReload    = "reload"
-	appCommandTunnel    = "tunnel"
-	appCommandRecording = "recording"
-	appCommandQuit      = "quit"
+	appCommandAnswer          = "answer"
+	appCommandSaved           = "saved"
+	appCommandSaving          = "saving"
+	appCommandReload          = "reload"
+	appCommandTunnel          = "tunnel"
+	appCommandRecording       = "recording"
+	appCommandAudienceDisplay = "audience-display"
+	appCommandQuit            = "quit"
 )
 
 // appCommandQueueSize is how many commands can wait for the control loop.
@@ -33,6 +34,8 @@ type appCommand struct {
 	Type   string          `json:"type"`
 	ID     string          `json:"id,omitempty"`
 	Action string          `json:"action,omitempty"`
+	// Name is the audience-display command's display name.
+	Name string `json:"name,omitempty"`
 	// Digest is the saving command's SHA-256 of the text about to be
 	// written, as 64 hexadecimal digits.
 	Digest string `json:"digest,omitempty"`

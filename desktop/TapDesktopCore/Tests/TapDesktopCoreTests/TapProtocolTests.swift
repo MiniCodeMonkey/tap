@@ -149,6 +149,7 @@ final class TapProtocolTests: XCTestCase {
         XCTAssertEqual(TapCommand.tunnel(start: false).line, #"{"type":"tunnel","start":false}"#)
         XCTAssertEqual(TapCommand.recording(action: .newSegment).line, #"{"type":"recording","action":"new-segment"}"#)
         XCTAssertEqual(TapCommand.recording(action: .stop).line, #"{"type":"recording","action":"stop"}"#)
+        XCTAssertEqual(TapCommand.audienceDisplay(name: "EPSON \"PJ\"").line, #"{"type":"audience-display","name":"EPSON \"PJ\""}"#, "the name is JSON-escaped")
     }
 
     func testEncodesTheSlideMessage() throws {

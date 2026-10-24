@@ -16,7 +16,8 @@ func TestReadAppCommandsRoutesAnswersAndQueuesCommands(t *testing.T) {
 	input := strings.NewReader(`{"type":"answer","id":"q1","value":true}` + "\n\n" +
 		`{"type":"reload"}` + "\n" +
 		`{"type":"tunnel","start":false}` + "\n" +
-		`{"type":"recording","action":"stop"}` + "\n")
+		`{"type":"recording","action":"stop"}` + "\n" +
+		`{"type":"audience-display","name":"Slides"}` + "\n")
 	commands := make(chan appCommand, appCommandQueueSize)
 	readAppCommands(input, io.Discard, questions, events, commands)
 
@@ -27,7 +28,7 @@ func TestReadAppCommandsRoutesAnswersAndQueuesCommands(t *testing.T) {
 	for command := range commands {
 		got = append(got, command)
 	}
-	if len(got) != 3 || got[0].Type != appCommandReload || got[1].Type != appCommandTunnel || got[2].Action != "stop" {
+	if len(got) != 4 || got[0].Type != appCommandReload || got[1].Type != appCommandTunnel || got[2].Action != "stop" || got[3].Type != appCommandAudienceDisplay || got[3].Name != "Slides" {
 		t.Fatalf("commands = %+v", got)
 	}
 	if got[1].Start == nil || *got[1].Start {

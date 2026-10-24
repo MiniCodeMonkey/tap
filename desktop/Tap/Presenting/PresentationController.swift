@@ -437,6 +437,7 @@ final class PresentationController {
             return
         }
         self.arrangement = arrangement
+        sendAudienceDisplay(arrangement)
         sleepAssertion.acquire()
         startRecordingTimer()
         if screenObserver == nil {
@@ -781,11 +782,20 @@ final class PresentationController {
         apply(current.assigning(role, to: screen), replacing: current)
     }
 
+    /// Tells tap which display the audience sees, so its recording captures
+    /// that one rather than a confidence monitor. A rehearsal has no
+    /// audience window.
+    private func sendAudienceDisplay(_ arrangement: DisplayArrangement) {
+        guard options?.mode == .play else { return }
+        session?.send(.audienceDisplay(name: arrangement.audience.name))
+    }
+
     private func apply(_ updated: DisplayArrangement, replacing current: DisplayArrangement) {
         guard updated != current else { return }
         displayAssignments.remember(updated)
         guard isActive, arrangement != nil else { return }
         arrangement = updated
+        sendAudienceDisplay(updated)
         guard windowsShown else { return }
         moveWindows(to: updated, from: current)
     }
@@ -807,6 +817,7 @@ final class PresentationController {
               let resolved = DisplayArrangement.resolve(screens: screens(), store: displayAssignments),
               resolved != current else { return }
         arrangement = resolved
+        sendAudienceDisplay(resolved)
         guard windowsShown else { return }
         moveWindows(to: resolved, from: current)
     }

@@ -380,6 +380,9 @@ public enum TapCommand: Equatable, Sendable {
     case tunnel(start: Bool)
     /// Start a new segment or stop recording, as `c` does.
     case recording(action: RecordingAction)
+    /// The name of the display the audience sees, so a recording on a stage
+    /// with several external screens captures it.
+    case audienceDisplay(name: String)
 
     /// The command as one JSON line, without the newline.
     public var line: String {
@@ -392,6 +395,7 @@ public enum TapCommand: Equatable, Sendable {
             return #"{"type":"answer","id":"# + Self.jsonString(id) + #","value":"# + (value ? "true" : "false") + "}"
         case .tunnel(let start): return #"{"type":"tunnel","start":"# + (start ? "true" : "false") + "}"
         case .recording(let action): return #"{"type":"recording","action":""# + action.rawValue + #""}"#
+        case .audienceDisplay(let name): return #"{"type":"audience-display","name":"# + Self.jsonString(name) + "}"
         }
     }
 

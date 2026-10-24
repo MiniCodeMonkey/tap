@@ -126,6 +126,15 @@ func (p *presentRecorder) pollDisplays(ctx context.Context) {
 	}
 }
 
+// SetAudienceDisplay names the screen the audience sees, so a stage with
+// several external screens records that one, and applies it at once.
+func (p *presentRecorder) SetAudienceDisplay(name string) {
+	p.mu.Lock()
+	p.follower.Prefer = name
+	p.mu.Unlock()
+	p.recheck(false)
+}
+
 // recheck folds a fresh screen list into the display rule. force applies
 // the decision even when it has not changed, for a segment whose recorder
 // stopped on its own.

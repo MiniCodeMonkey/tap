@@ -51,7 +51,7 @@ func TestParseScreensGivesAMirroredScreenNoIndex(t *testing.T) {
 }
 
 func TestChooseDisplayFollowsAProjectorThatIsTheMainDisplay(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(projectorMainProfile)))
+	display, external := ChooseDisplay(parseScreens([]byte(projectorMainProfile)), "")
 	if display != 1 || !external {
 		t.Errorf("got (%d, %v), want (1, true)", display, external)
 	}
@@ -64,21 +64,21 @@ func TestParseScreensWithBrokenJSON(t *testing.T) {
 }
 
 func TestChooseDisplayRecordsTheBuiltInScreenAlone(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(builtInOnlyProfile)))
+	display, external := ChooseDisplay(parseScreens([]byte(builtInOnlyProfile)), "")
 	if display != 1 || external {
 		t.Errorf("got (%d, %v), want (1, false)", display, external)
 	}
 }
 
 func TestChooseDisplayPrefersTheProjector(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(extendedProfile)))
+	display, external := ChooseDisplay(parseScreens([]byte(extendedProfile)), "")
 	if display != 2 || !external {
 		t.Errorf("got (%d, %v), want (2, true)", display, external)
 	}
 }
 
 func TestChooseDisplayRecordsTheBuiltInScreenWhenMirrored(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(mirroredProfile)))
+	display, external := ChooseDisplay(parseScreens([]byte(mirroredProfile)), "")
 	if display != 1 || !external {
 		t.Errorf("got (%d, %v), want (1, true)", display, external)
 	}
@@ -90,13 +90,37 @@ func TestChooseDisplayTakesTheFirstOfTwoProjectors(t *testing.T) {
 		{Name: "Left", Index: 2},
 		{Name: "Right", Index: 3},
 	}
-	if display, _ := ChooseDisplay(screens); display != 2 {
+	if display, _ := ChooseDisplay(screens, ""); display != 2 {
 		t.Errorf("got %d, want 2", display)
 	}
 }
 
 func TestChooseDisplayFallsBackToTheMainDisplay(t *testing.T) {
-	if display, external := ChooseDisplay(nil); display != 1 || external {
+	if display, external := ChooseDisplay(nil, ""); display != 1 || external {
 		t.Errorf("got (%d, %v), want (1, false)", display, external)
+	}
+}
+
+func TestChooseDisplayPrefersTheNamedExternalScreen(t *testing.T) {
+	screens := []Screen{
+		{Name: "Color LCD", Index: 1, BuiltIn: true},
+		{Name: "Notes", Index: 2},
+		{Name: "Slides", Index: 3},
+	}
+	if display, external := ChooseDisplay(screens, "Slides"); display != 3 || !external {
+		t.Errorf("got (%d, %v), want (3, true)", display, external)
+	}
+}
+
+func TestChooseDisplayIgnoresAPreferredNameItCannotUse(t *testing.T) {
+	screens := []Screen{
+		{Name: "Color LCD", Index: 1, BuiltIn: true},
+		{Name: "Notes", Index: 2},
+		{Name: "Slides", Index: 0, Mirrored: true},
+	}
+	for _, preferred := range []string{"Unknown", "Slides", "Color LCD"} {
+		if display, _ := ChooseDisplay(screens, preferred); display != 2 {
+			t.Errorf("preferred %q: got %d, want 2", preferred, display)
+		}
 	}
 }
