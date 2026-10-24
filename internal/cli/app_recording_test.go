@@ -24,7 +24,7 @@ type fakePresent struct {
 	started         bool
 	leftFirstSlide  bool
 	finished        bool
-	audienceDisplay string
+	audienceDisplay uint32
 	kept            bool
 }
 
@@ -36,10 +36,10 @@ func (present *fakePresent) State() tui.PresentRecordingState {
 	return present.state
 }
 
-func (present *fakePresent) SetAudienceDisplay(name string) {
+func (present *fakePresent) SetAudienceDisplay(displayID uint32) {
 	present.mu.Lock()
 	defer present.mu.Unlock()
-	present.audienceDisplay = name
+	present.audienceDisplay = displayID
 }
 
 func (present *fakePresent) Elapsed() time.Duration { return 3 * time.Second }

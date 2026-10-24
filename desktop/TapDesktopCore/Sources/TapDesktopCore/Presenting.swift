@@ -7,8 +7,12 @@ public struct ScreenInfo: Equatable, Sendable {
     public let name: String
     public let frame: CGRect
     public let isBuiltIn: Bool
+    /// The CoreGraphics display ID, 0 when unknown. Identical monitors share
+    /// a name, so this is what tap uses to find the audience screen.
+    public let displayID: UInt32
 
-    public init(name: String, frame: CGRect, isBuiltIn: Bool) {
+    public init(name: String, frame: CGRect, isBuiltIn: Bool, displayID: UInt32 = 0) {
+        self.displayID = displayID
         self.name = name
         self.frame = frame
         self.isBuiltIn = isBuiltIn

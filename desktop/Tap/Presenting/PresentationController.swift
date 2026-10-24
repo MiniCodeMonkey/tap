@@ -787,7 +787,7 @@ final class PresentationController {
     /// audience window.
     private func sendAudienceDisplay(_ arrangement: DisplayArrangement) {
         guard options?.mode == .play else { return }
-        session?.send(.audienceDisplay(name: arrangement.audience.name))
+        session?.send(.audienceDisplay(displayID: arrangement.audience.displayID))
     }
 
     private func apply(_ updated: DisplayArrangement, replacing current: DisplayArrangement) {
@@ -1142,6 +1142,6 @@ extension ScreenInfo {
         let displayID = CGDirectDisplayID(number?.uint32Value ?? 0)
         // Some projectors and adapters report no name; the role menu shows its name as its title.
         let name = screen.localizedName.trimmingCharacters(in: .whitespaces)
-        self.init(name: name.isEmpty ? "External Display" : name, frame: screen.frame, isBuiltIn: CGDisplayIsBuiltin(displayID) != 0)
+        self.init(name: name.isEmpty ? "External Display" : name, frame: screen.frame, isBuiltIn: CGDisplayIsBuiltin(displayID) != 0, displayID: displayID)
     }
 }

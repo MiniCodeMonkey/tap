@@ -716,7 +716,7 @@ func (present *fakeLockedPresent) State() tui.PresentRecordingState {
 	return tui.PresentNotRecording
 }
 
-func (present *fakeLockedPresent) SetAudienceDisplay(string) {}
+func (present *fakeLockedPresent) SetAudienceDisplay(uint32) {}
 
 func (present *fakeLockedPresent) Elapsed() time.Duration {
 	present.mu.Lock()

@@ -126,11 +126,11 @@ func (p *presentRecorder) pollDisplays(ctx context.Context) {
 	}
 }
 
-// SetAudienceDisplay names the screen the audience sees, so a stage with
+// SetAudienceDisplay identifies the screen the audience sees by its display ID, so a stage with
 // several external screens records that one, and applies it at once.
-func (p *presentRecorder) SetAudienceDisplay(name string) {
+func (p *presentRecorder) SetAudienceDisplay(displayID uint32) {
 	p.mu.Lock()
-	p.follower.Prefer = name
+	p.follower.Prefer = displayID
 	p.mu.Unlock()
 	p.recheck(false)
 }

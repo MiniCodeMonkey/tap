@@ -1,6 +1,9 @@
 package recorder
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strconv"
+)
 
 // Screen is one online display as system_profiler reports it. Index is the
 // screencapture -D number: the main display, the one with the menu bar, is
@@ -8,10 +11,14 @@ import "encoding/json"
 // shows another screen's picture and has no -D number of its own, so its
 // Index is 0.
 type Screen struct {
-	Name     string
-	Index    int
-	BuiltIn  bool
-	Mirrored bool
+	Name string
+	// DisplayID is the CoreGraphics display ID, the same number the app
+	// reads from NSScreen, or 0 when system_profiler gave none. Identical
+	// monitors share a Name, so the ID is what tells them apart.
+	DisplayID uint32
+	Index     int
+	BuiltIn   bool
+	Mirrored  bool
 }
 
 // screenProfile is the part of the system_profiler display report the
@@ -20,6 +27,7 @@ type screenProfile struct {
 	Displays []struct {
 		Screens []struct {
 			Name           string `json:"_name"`
+			DisplayID      string `json:"_spdisplays_displayID"`
 			Main           string `json:"spdisplays_main"`
 			Online         string `json:"spdisplays_online"`
 			ConnectionType string `json:"spdisplays_connection_type"`
@@ -43,9 +51,11 @@ func parseScreens(raw []byte) []Screen {
 			if entry.Online == "spdisplays_no" {
 				continue
 			}
+			displayID, _ := strconv.ParseUint(entry.DisplayID, 10, 32)
 			screen := Screen{
-				Name:    entry.Name,
-				BuiltIn: entry.ConnectionType == "spdisplays_internal",
+				Name:      entry.Name,
+				DisplayID: uint32(displayID),
+				BuiltIn:   entry.ConnectionType == "spdisplays_internal",
 				// Both screens report mirroring on; only the source
 				// screen is the master, and only it has a -D number.
 				Mirrored: entry.Mirror == "spdisplays_on" && entry.MirrorStatus != "spdisplays_master_mirror",
@@ -71,14 +81,14 @@ func parseScreens(raw []byte) []Screen {
 }
 
 // ChooseDisplay is the display a recording should capture: the external
-// screen named preferred when screencapture can address it, otherwise the
-// first external screen it can address, or the built-in screen when there
-// is none. A preferred name that matches no addressable external screen
-// (unknown, mirrored, built-in, or spelled differently by the app and the
-// system) falls back to the first-external rule. externalConnected reports whether any external screen is
+// screen with display ID preferredID when screencapture can address it,
+// otherwise the first external screen it can address, or the built-in
+// screen when there is none. A preferredID of 0, or one that matches no
+// addressable external screen (unknown, mirrored or built-in), falls back
+// to the first-external rule. externalConnected reports whether any external screen is
 // connected at all, mirrored or not, because a mirrored projector still
 // means the talk is on a projector.
-func ChooseDisplay(screens []Screen, preferred string) (display int, externalConnected bool) {
+func ChooseDisplay(screens []Screen, preferredID uint32) (display int, externalConnected bool) {
 	for _, screen := range screens {
 		if screen.BuiltIn {
 			continue
@@ -87,7 +97,7 @@ func ChooseDisplay(screens []Screen, preferred string) (display int, externalCon
 		if display == 0 && screen.Index > 0 {
 			display = screen.Index
 		}
-		if preferred != "" && screen.Name == preferred && screen.Index > 0 {
+		if preferredID != 0 && screen.DisplayID == preferredID && screen.Index > 0 {
 			return screen.Index, true
 		}
 	}

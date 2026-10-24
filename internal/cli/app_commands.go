@@ -34,8 +34,8 @@ type appCommand struct {
 	Type   string          `json:"type"`
 	ID     string          `json:"id,omitempty"`
 	Action string          `json:"action,omitempty"`
-	// Name is the audience-display command's display name.
-	Name string `json:"name,omitempty"`
+	// DisplayID is the audience-display command's CoreGraphics display ID.
+	DisplayID uint32 `json:"displayID,omitempty"`
 	// Digest is the saving command's SHA-256 of the text about to be
 	// written, as 64 hexadecimal digits.
 	Digest string `json:"digest,omitempty"`

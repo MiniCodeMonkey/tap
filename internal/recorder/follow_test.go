@@ -46,8 +46,8 @@ func TestFollowerCurrentIsTheLastDecision(t *testing.T) {
 }
 
 func TestFollowerRecordsThePreferredScreen(t *testing.T) {
-	follower := Follower{Prefer: "Slides"}
-	screens := []Screen{{Name: "Color LCD", Index: 1, BuiltIn: true}, {Name: "Notes", Index: 2}, {Name: "Slides", Index: 3}}
+	follower := Follower{Prefer: 3}
+	screens := []Screen{{Name: "Color LCD", Index: 1, BuiltIn: true}, {Name: "Notes", DisplayID: 2, Index: 2}, {Name: "Slides", DisplayID: 3, Index: 3}}
 
 	if decision, _ := follower.Decide(screens); decision != (FollowDecision{Display: 3}) {
 		t.Errorf("got %+v, want display 3", decision)

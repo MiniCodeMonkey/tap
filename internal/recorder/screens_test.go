@@ -51,7 +51,7 @@ func TestParseScreensGivesAMirroredScreenNoIndex(t *testing.T) {
 }
 
 func TestChooseDisplayFollowsAProjectorThatIsTheMainDisplay(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(projectorMainProfile)), "")
+	display, external := ChooseDisplay(parseScreens([]byte(projectorMainProfile)), 0)
 	if display != 1 || !external {
 		t.Errorf("got (%d, %v), want (1, true)", display, external)
 	}
@@ -64,21 +64,21 @@ func TestParseScreensWithBrokenJSON(t *testing.T) {
 }
 
 func TestChooseDisplayRecordsTheBuiltInScreenAlone(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(builtInOnlyProfile)), "")
+	display, external := ChooseDisplay(parseScreens([]byte(builtInOnlyProfile)), 0)
 	if display != 1 || external {
 		t.Errorf("got (%d, %v), want (1, false)", display, external)
 	}
 }
 
 func TestChooseDisplayPrefersTheProjector(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(extendedProfile)), "")
+	display, external := ChooseDisplay(parseScreens([]byte(extendedProfile)), 0)
 	if display != 2 || !external {
 		t.Errorf("got (%d, %v), want (2, true)", display, external)
 	}
 }
 
 func TestChooseDisplayRecordsTheBuiltInScreenWhenMirrored(t *testing.T) {
-	display, external := ChooseDisplay(parseScreens([]byte(mirroredProfile)), "")
+	display, external := ChooseDisplay(parseScreens([]byte(mirroredProfile)), 0)
 	if display != 1 || !external {
 		t.Errorf("got (%d, %v), want (1, true)", display, external)
 	}
@@ -90,37 +90,48 @@ func TestChooseDisplayTakesTheFirstOfTwoProjectors(t *testing.T) {
 		{Name: "Left", Index: 2},
 		{Name: "Right", Index: 3},
 	}
-	if display, _ := ChooseDisplay(screens, ""); display != 2 {
+	if display, _ := ChooseDisplay(screens, 0); display != 2 {
 		t.Errorf("got %d, want 2", display)
 	}
 }
 
 func TestChooseDisplayFallsBackToTheMainDisplay(t *testing.T) {
-	if display, external := ChooseDisplay(nil, ""); display != 1 || external {
+	if display, external := ChooseDisplay(nil, 0); display != 1 || external {
 		t.Errorf("got (%d, %v), want (1, false)", display, external)
 	}
 }
 
-func TestChooseDisplayPrefersTheNamedExternalScreen(t *testing.T) {
+func TestChooseDisplayPrefersTheScreenWithTheDisplayID(t *testing.T) {
 	screens := []Screen{
-		{Name: "Color LCD", Index: 1, BuiltIn: true},
-		{Name: "Notes", Index: 2},
-		{Name: "Slides", Index: 3},
+		{Name: "Color LCD", DisplayID: 1, Index: 1, BuiltIn: true},
+		{Name: "LG UltraFine", DisplayID: 4, Index: 2},
+		{Name: "LG UltraFine", DisplayID: 2, Index: 3},
+		{Name: "LG UltraFine", DisplayID: 5, Index: 4},
 	}
-	if display, external := ChooseDisplay(screens, "Slides"); display != 3 || !external {
-		t.Errorf("got (%d, %v), want (3, true)", display, external)
+	if display, external := ChooseDisplay(screens, 5); display != 4 || !external {
+		t.Errorf("got (%d, %v), want (4, true)", display, external)
 	}
 }
 
-func TestChooseDisplayIgnoresAPreferredNameItCannotUse(t *testing.T) {
+func TestChooseDisplayIgnoresADisplayIDItCannotUse(t *testing.T) {
 	screens := []Screen{
-		{Name: "Color LCD", Index: 1, BuiltIn: true},
-		{Name: "Notes", Index: 2},
-		{Name: "Slides", Index: 0, Mirrored: true},
+		{Name: "Color LCD", DisplayID: 1, Index: 1, BuiltIn: true},
+		{Name: "Notes", DisplayID: 2, Index: 2},
+		{Name: "Slides", DisplayID: 3, Mirrored: true},
 	}
-	for _, preferred := range []string{"Unknown", "Slides", "Color LCD"} {
-		if display, _ := ChooseDisplay(screens, preferred); display != 2 {
-			t.Errorf("preferred %q: got %d, want 2", preferred, display)
+	for _, preferredID := range []uint32{0, 9, 3, 1} {
+		if display, _ := ChooseDisplay(screens, preferredID); display != 2 {
+			t.Errorf("preferred %d: got %d, want 2", preferredID, display)
 		}
+	}
+}
+
+func TestParseScreensReadsTheDisplayID(t *testing.T) {
+	raw := `{"SPDisplaysDataType":[{"spdisplays_ndrvs":[
+		{"_name":"LG UltraFine","_spdisplays_displayID":"4","spdisplays_main":"spdisplays_yes"},
+		{"_name":"LG UltraFine","_spdisplays_displayID":"x"}]}]}`
+	screens := parseScreens([]byte(raw))
+	if len(screens) != 2 || screens[0].DisplayID != 4 || screens[1].DisplayID != 0 {
+		t.Errorf("screens = %+v, want display IDs 4 and 0", screens)
 	}
 }
