@@ -1,13 +1,17 @@
 # Tap Desktop. Run from the repo root with `make -C desktop <target>`.
 DERIVED_DATA = build/DerivedData
-SIGN_IDENTITY = -
-XCODEBUILD = xcodebuild -project Tap.xcodeproj -derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY=$(SIGN_IDENTITY) CODE_SIGNING_REQUIRED=NO
+SIGN_IDENTITY = $(DEVELOPMENT_IDENTITY)
+SIGN_TEAM = $(if $(filter -,$(SIGN_IDENTITY)),,$(DEVELOPMENT_TEAM))
+XCODEBUILD = xcodebuild -project Tap.xcodeproj -derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" DEVELOPMENT_TEAM=$(SIGN_TEAM) CODE_SIGNING_REQUIRED=NO
 # An ad-hoc app is known to macOS privacy settings by the hash of its
-# binary, so every rebuild loses its Screen Recording permission. `make
-# build` signs with the first Apple Development certificate in the
-# keychain, whose identity stays the same across builds; with none, as on
-# CI, it signs ad hoc.
-DEVELOPMENT_IDENTITY = $(or $(shell security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development/ { print $$2; exit }'),-)
+# binary, so every rebuild loses its Screen Recording permission. Every
+# Debug, test and benchmark build shares one Tap.app, so all of them sign
+# with the Dotsquare team's Apple Development certificate, whose identity
+# stays the same across builds. Xcode picks that team's certificate among
+# any others in the keychain, and fails the build when it is missing. With
+# no Apple Development certificate at all, as on CI, builds sign ad hoc.
+DEVELOPMENT_TEAM = 7VXX8B6CG6
+DEVELOPMENT_IDENTITY = $(if $(shell security find-identity -v -p codesigning 2>/dev/null | grep '"Apple Development'),Apple Development,-)
 ONLY ?= TapTests
 # Every hosted test, UI test and benchmark has five minutes, so a hang
 # fails that one test with a timeout instead of the whole job. A test
@@ -29,7 +33,6 @@ project:
 core-test:
 	cd TapDesktopCore && swift test
 
-build: SIGN_IDENTITY = $(DEVELOPMENT_IDENTITY)
 build: project
 	$(XCODEBUILD) -scheme Tap -configuration Debug -destination 'platform=macOS' build
 
@@ -81,6 +84,7 @@ check-release-hooks: bench-build
 
 # The Release app with its version and build number, signed ad-hoc by
 # Xcode; release.sh signs it again with the real identity when there is one.
+release-build: SIGN_IDENTITY = -
 release-build: project
 	@test -n "$(BUILD_NUMBER)" || { echo "no build number for VERSION=$(VERSION)"; exit 1; }
 	$(XCODEBUILD) -scheme Tap -configuration Release -destination 'platform=macOS' TAP_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUMBER) build
