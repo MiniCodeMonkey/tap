@@ -85,8 +85,6 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         }
     }
 
-    private static let tmuxAutostartedVariable = "ZSH_TMUX_AUTOSTARTED"
-
     private static func run(shellPath: String, timeout: TimeInterval, fallback: [String: String]) -> LoginShellEnvironment {
         let interactive = attempt(shellPath: shellPath, flags: ["-l", "-i"], timeout: timeout, fallback: fallback)
         guard interactive.outcome != .loaded else { return interactive }
@@ -103,9 +101,6 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = flags + ["-c", script]
-        // Tells oh-my-zsh's tmux plugin it has already started, so an
-        // interactive shell with ZSH_TMUX_AUTOSTART reaches the script.
-        process.environment = ProcessInfo.processInfo.environment.merging([tmuxAutostartedVariable: "true"]) { _, new in new }
         process.standardInput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         let output = Pipe()
@@ -143,7 +138,6 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         output.fileHandleForReading.readabilityHandler = nil
         guard process.terminationStatus == 0 else { return failed("the shell exited with status \(process.terminationStatus)") }
         guard var variables = parse(snapshot(), markers: markers), !variables.isEmpty else { return failed("the shell printed no environment") }
-        variables[tmuxAutostartedVariable] = nil
         if variables["PATH"] == nil { variables["PATH"] = fallback["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin" }
         return LoginShellEnvironment(variables: variables, outcome: .loaded)
     }

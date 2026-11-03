@@ -88,18 +88,6 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertEqual(environment.variables["FROM_LOGIN_ONLY"], "yes")
     }
 
-    func testTheInteractiveShellSkipsTheTmuxAutostart() async throws {
-        let shell = try TestScripts.make("""
-        if [ "$ZSH_TMUX_AUTOSTARTED" != "true" ]; then exit 0; fi
-        export FROM_ZSHRC=yes
-        exec /bin/sh -c "$4"
-        """)
-        let environment = await LoginShellEnvironment.load(shellPath: shell.path, timeout: 5, fallback: ["PATH": "/usr/bin"])
-        XCTAssertEqual(environment.outcome, .loaded)
-        XCTAssertEqual(environment.variables["FROM_ZSHRC"], "yes")
-        XCTAssertNil(environment.variables["ZSH_TMUX_AUTOSTARTED"])
-    }
-
     func testFallsBackWithANoticeWhenTheShellHangs() async throws {
         let shell = try TestScripts.make("sleep 30")
         let started = Date()
