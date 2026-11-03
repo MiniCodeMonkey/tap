@@ -73,9 +73,11 @@ public struct LoginShellEnvironment: Equatable, Sendable {
 
     /// Runs `<shell> -l -i -c <script>`, where the script prints `env -0`
     /// between a fresh, unguessable marker pair. A profile can end the
-    /// interactive shell before the script runs (a terminal multiplexer that
-    /// starts from .zshrc does), so a failure tries once more with `-l`
-    /// alone, which skips .zshrc and still finds what .zprofile sets up.
+    /// interactive shell before the script runs: one that starts a terminal
+    /// multiplexer does, and an app has no terminal to give it. So a failure
+    /// runs the shell again as if already inside a multiplexer, which keeps
+    /// all of .zshrc, then with `-l` alone, which skips .zshrc for a profile
+    /// that fails for any other reason.
     public static func load(shellPath: String, timeout: TimeInterval = 5,
                             fallback: [String: String] = ProcessInfo.processInfo.environment) async -> LoginShellEnvironment {
         await withCheckedContinuation { continuation in
@@ -85,14 +87,20 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         }
     }
 
+    /// What tmux, Screen and Zellij set inside a session, and what autostart
+    /// snippets check before starting one.
+    private static let multiplexerVariables = ["TMUX": "/dev/null,0,0", "STY": "0.tap", "ZELLIJ": "0"]
+
     private static func run(shellPath: String, timeout: TimeInterval, fallback: [String: String]) -> LoginShellEnvironment {
-        let interactive = attempt(shellPath: shellPath, flags: ["-l", "-i"], timeout: timeout, fallback: fallback)
-        guard interactive.outcome != .loaded else { return interactive }
-        let login = attempt(shellPath: shellPath, flags: ["-l"], timeout: timeout, fallback: fallback)
-        return login.outcome == .loaded ? login : interactive
+        let first = attempt(shellPath: shellPath, flags: ["-l", "-i"], insideMultiplexer: false, timeout: timeout, fallback: fallback)
+        guard first.outcome != .loaded else { return first }
+        let insideMultiplexer = attempt(shellPath: shellPath, flags: ["-l", "-i"], insideMultiplexer: true, timeout: timeout, fallback: fallback)
+        guard insideMultiplexer.outcome != .loaded else { return insideMultiplexer }
+        let login = attempt(shellPath: shellPath, flags: ["-l"], insideMultiplexer: false, timeout: timeout, fallback: fallback)
+        return login.outcome == .loaded ? login : first
     }
 
-    private static func attempt(shellPath: String, flags: [String], timeout: TimeInterval, fallback: [String: String]) -> LoginShellEnvironment {
+    private static func attempt(shellPath: String, flags: [String], insideMultiplexer: Bool, timeout: TimeInterval, fallback: [String: String]) -> LoginShellEnvironment {
         func failed(_ reason: String) -> LoginShellEnvironment {
             LoginShellEnvironment(variables: fallback, outcome: .failed(reason))
         }
@@ -101,6 +109,9 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = flags + ["-c", script]
+        if insideMultiplexer {
+            process.environment = ProcessInfo.processInfo.environment.merging(multiplexerVariables) { _, new in new }
+        }
         process.standardInput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         let output = Pipe()
@@ -138,6 +149,9 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         output.fileHandleForReading.readabilityHandler = nil
         guard process.terminationStatus == 0 else { return failed("the shell exited with status \(process.terminationStatus)") }
         guard var variables = parse(snapshot(), markers: markers), !variables.isEmpty else { return failed("the shell printed no environment") }
+        if insideMultiplexer {
+            for name in multiplexerVariables.keys { variables[name] = nil }
+        }
         if variables["PATH"] == nil { variables["PATH"] = fallback["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin" }
         return LoginShellEnvironment(variables: variables, outcome: .loaded)
     }
