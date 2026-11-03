@@ -76,6 +76,42 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertNil(environment.notice)
     }
 
+    func testRetriesWithoutInteractiveWhenTheProfileEndsTheShell() async throws {
+        // $2 is -i on the first run: an autostarting multiplexer exits 0 and never runs the script.
+        let shell = try TestScripts.make("""
+        if [ "$2" = "-i" ]; then echo "duplicate session: main"; exit 0; fi
+        export FROM_LOGIN_ONLY=yes
+        exec /bin/sh -c "$3"
+        """)
+        let environment = await LoginShellEnvironment.load(shellPath: shell.path, timeout: 5, fallback: ["PATH": "/usr/bin"])
+        XCTAssertEqual(environment.outcome, .loaded)
+        XCTAssertEqual(environment.variables["FROM_LOGIN_ONLY"], "yes")
+    }
+
+    func testKeepsTheWholeProfileWhenAMultiplexerAutostarts() async throws {
+        for variable in ["TMUX", "STY", "ZELLIJ"] {
+            let shell = try TestScripts.make("""
+            if [ -z "$\(variable)" ]; then exit 0; fi
+            export FROM_ZSHRC=yes
+            exec /bin/sh -c "$4"
+            """)
+            let environment = await LoginShellEnvironment.load(shellPath: shell.path, timeout: 5, fallback: ["PATH": "/usr/bin"])
+            XCTAssertEqual(environment.outcome, .loaded, variable)
+            XCTAssertEqual(environment.variables["FROM_ZSHRC"], "yes", variable)
+            XCTAssertNil(environment.variables[variable], variable)
+        }
+    }
+
+    func testAProfileThatWorksSeesNoMultiplexerVariables() async throws {
+        let counter = try TestScripts.temporaryFolder().appendingPathComponent("runs")
+        let shell = try TestScripts.make("""
+        echo "${TMUX:-none}" >> "\(counter.path)"
+        exec /bin/sh -c "$4"
+        """)
+        _ = await LoginShellEnvironment.load(shellPath: shell.path, timeout: 5, fallback: ["PATH": "/usr/bin"])
+        XCTAssertEqual(try String(contentsOf: counter, encoding: .utf8), "none\n")
+    }
+
     func testFallsBackWithANoticeWhenTheShellHangs() async throws {
         let shell = try TestScripts.make("sleep 30")
         let started = Date()
