@@ -72,7 +72,10 @@ public struct LoginShellEnvironment: Equatable, Sendable {
     }
 
     /// Runs `<shell> -l -i -c <script>`, where the script prints `env -0`
-    /// between a fresh, unguessable marker pair.
+    /// between a fresh, unguessable marker pair. A profile can end the
+    /// interactive shell before the script runs (a terminal multiplexer that
+    /// starts from .zshrc does), so a failure tries once more with `-l`
+    /// alone, which skips .zshrc and still finds what .zprofile sets up.
     public static func load(shellPath: String, timeout: TimeInterval = 5,
                             fallback: [String: String] = ProcessInfo.processInfo.environment) async -> LoginShellEnvironment {
         await withCheckedContinuation { continuation in
@@ -82,7 +85,16 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         }
     }
 
+    private static let tmuxAutostartedVariable = "ZSH_TMUX_AUTOSTARTED"
+
     private static func run(shellPath: String, timeout: TimeInterval, fallback: [String: String]) -> LoginShellEnvironment {
+        let interactive = attempt(shellPath: shellPath, flags: ["-l", "-i"], timeout: timeout, fallback: fallback)
+        guard interactive.outcome != .loaded else { return interactive }
+        let login = attempt(shellPath: shellPath, flags: ["-l"], timeout: timeout, fallback: fallback)
+        return login.outcome == .loaded ? login : interactive
+    }
+
+    private static func attempt(shellPath: String, flags: [String], timeout: TimeInterval, fallback: [String: String]) -> LoginShellEnvironment {
         func failed(_ reason: String) -> LoginShellEnvironment {
             LoginShellEnvironment(variables: fallback, outcome: .failed(reason))
         }
@@ -90,7 +102,10 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         let script = "printf '%s' '\(markers.begin)'; /usr/bin/env -0; printf '%s' '\(markers.end)'"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
-        process.arguments = ["-l", "-i", "-c", script]
+        process.arguments = flags + ["-c", script]
+        // Tells oh-my-zsh's tmux plugin it has already started, so an
+        // interactive shell with ZSH_TMUX_AUTOSTART reaches the script.
+        process.environment = ProcessInfo.processInfo.environment.merging([tmuxAutostartedVariable: "true"]) { _, new in new }
         process.standardInput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         let output = Pipe()
@@ -128,6 +143,7 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         output.fileHandleForReading.readabilityHandler = nil
         guard process.terminationStatus == 0 else { return failed("the shell exited with status \(process.terminationStatus)") }
         guard var variables = parse(snapshot(), markers: markers), !variables.isEmpty else { return failed("the shell printed no environment") }
+        variables[tmuxAutostartedVariable] = nil
         if variables["PATH"] == nil { variables["PATH"] = fallback["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin" }
         return LoginShellEnvironment(variables: variables, outcome: .loaded)
     }
